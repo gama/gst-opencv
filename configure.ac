@@ -86,9 +86,10 @@ AC_SUBST(GST_BASE_CFLAGS)
 AC_SUBST(GST_BASE_LIBS)
 
 PKG_CHECK_MODULES(OPENCV,
-		  opencv,
-		  HAVE_OPENCV=yes, HAVE_OPENCV=no)
+                  opencv,
+                  HAVE_OPENCV=yes, HAVE_OPENCV=no)
 
+OPENCV_CFLAGS="-D_GNU_SOURCE -DCV_NO_BACKWARD_COMPATIBILITY -Wno-unused-function ${OPENCV_CFLAGS}"
 AC_SUBST(OPENCV_CFLAGS)
 AC_SUBST(OPENCV_LIBS)
 
@@ -138,5 +139,15 @@ dnl set proper LDFLAGS for plugins
 GST_PLUGIN_LDFLAGS='-module -avoid-version -export-symbols-regex [_]*\(gst_\|Gst\|GST_\).*'
 AC_SUBST(GST_PLUGIN_LDFLAGS)
 
-AC_OUTPUT(Makefile m4/Makefile src/Makefile src/edgedetect/Makefile src/faceblur/Makefile src/facedetect/Makefile src/pyramidsegment/Makefile src/templatematch/Makefile)
-
+AC_OUTPUT([
+    Makefile
+    m4/Makefile
+    src/Makefile
+    src/edgedetect/Makefile
+    src/faceblur/Makefile
+    src/facedetect/Makefile
+    src/lkopticalflow/Makefile
+    src/pyramidsegment/Makefile
+    src/templatematch/Makefile
+])
+dnl src/kalmanfilter/Makefile

@@ -26,6 +26,7 @@
 #include "gstedgedetect.h"
 #include "gstfaceblur.h"
 #include "gstfacedetect.h"
+#include "gstlkopticalflow.h"
 #include "gstpyramidsegment.h"
 #include "gsttemplatematch.h"
 
@@ -40,6 +41,9 @@ plugin_init (GstPlugin * plugin)
     return FALSE;
 
   if (!gst_facedetect_plugin_init (plugin))
+    return FALSE;
+
+  if (!gst_lkopticalflow_plugin_init (plugin))
     return FALSE;
 
   if (!gst_pyramidsegment_plugin_init (plugin))
