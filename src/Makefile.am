@@ -3,7 +3,8 @@ SUBDIRS = edgedetect        \
           facedetect        \
           lkopticalflow     \
           pyramidsegment    \
-          templatematch
+          templatematch     \
+          tracker       
 
 # plugindir is set in configure
 
@@ -20,7 +21,9 @@ libgstopencv_la_CFLAGS = $(GST_CFLAGS) $(OPENCV_CFLAGS)     \
                          -I${top_srcdir}/src/facedetect     \
                          -I${top_srcdir}/src/lkopticalflow  \
                          -I${top_srcdir}/src/pyramidsegment \
-                         -I${top_srcdir}/src/templatematch
+                         -I${top_srcdir}/src/templatematch  \
+                         -I${top_srcdir}/src/tracker
+
 
 libgstopencv_la_LIBADD = $(GST_LIBS) $(OPENCV_LIBS)                                 \
                          $(top_builddir)/src/edgedetect/libgstedgedetect.la         \
@@ -28,7 +31,8 @@ libgstopencv_la_LIBADD = $(GST_LIBS) $(OPENCV_LIBS)                             
                          $(top_builddir)/src/facedetect/libgstfacedetect.la         \
                          $(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la   \
                          $(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la \
-                         $(top_builddir)/src/templatematch/libgsttemplatematch.la
+                         $(top_builddir)/src/templatematch/libgsttemplatematch.la   \
+                         $(top_builddir)/src/tracker/libgsttracker.la
 
 libgstopencv_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 
@@ -36,7 +40,8 @@ libgstopencv_la_DEPENDENCIES = $(top_builddir)/src/edgedetect/libgstedgedetect.l
                                $(top_builddir)/src/faceblur/libgstfaceblur.la               \
                                $(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la     \
                                $(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la   \
-                               $(top_builddir)/src/templatematch/libgsttemplatematch.la
+                               $(top_builddir)/src/templatematch/libgsttemplatematch.la     \
+                               $(top_builddir)/src/tracker/libgsttracker.la
 
 # headers we need but don't want installed
 noinst_HEADERS = 

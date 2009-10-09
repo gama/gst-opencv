@@ -149,5 +149,6 @@ AC_OUTPUT([
     src/lkopticalflow/Makefile
     src/pyramidsegment/Makefile
     src/templatematch/Makefile
+    src/tracker/Makefile
 ])
 dnl src/kalmanfilter/Makefile
