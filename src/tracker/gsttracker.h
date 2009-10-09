@@ -48,6 +48,8 @@
 
 #include <gst/gst.h>
 #include <cv.h>
+#include <highgui.h>
+#include <cvaux.h>
 
 G_BEGIN_DECLS
 /* #defines don't like whitespacey bits */
@@ -89,6 +91,11 @@ struct _GstTracker
     int sample_size;
 
     int width_image, height_image;
+
+    int nframesToLearnBG;
+    int framesProcessed;
+    CvBGCodeBookModel* backgroundModel;
+    IplImage* background;
 };
 
 struct _GstTrackerClass

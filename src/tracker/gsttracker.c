@@ -66,6 +66,7 @@
 
 #include "gsttracker.h"
 #include "condensation.h"
+#include "identifier.h"
 
 GST_DEBUG_CATEGORY_STATIC(gst_tracker_debug);
 #define GST_CAT_DEFAULT gst_tracker_debug
@@ -81,6 +82,7 @@ static const float F[] = { 1, 1, 0, 1 };
 #define DEFAULT_STATE_DIM           4
 #define DEFAULT_MEASUREMENT_DIM     4
 #define DEFAULT_SAMPLE_SIZE         50
+#define DEFAULT_FRAMES_LEARN_BG     3
 
 enum {
     PROP_0,
@@ -218,6 +220,9 @@ gst_tracker_init(GstTracker * filter, GstTrackerClass * gclass)
     filter->measurement_dim    = DEFAULT_MEASUREMENT_DIM;
     filter->sample_size        = DEFAULT_SAMPLE_SIZE;
 
+    filter->nframesToLearnBG   = DEFAULT_FRAMES_LEARN_BG;
+    filter->framesProcessed    = 0;
+
 }
 
 static void
@@ -306,6 +311,7 @@ gst_tracker_set_caps(GstPad * pad, GstCaps * caps)
     filter->flags         = 0;
     filter->initialized   = FALSE;
 
+    
     filter->ConDens = initCondensation(filter->state_dim, filter->measurement_dim, filter->sample_size, filter->width_image, filter->height_image);
 
     otherpad = (pad == filter->srcpad) ? filter->sinkpad : filter->srcpad;
@@ -332,12 +338,31 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
 
 
+#if 0
+    
+    if (filter->framesProcessed <= filter->nframesToLearnBG){
+        // Assertion: model && CV_MAT_TYPE(image->type) == CV_8UC3 && (!mask || (CV_IS_MASK_ARR(mask) && CV_ARE_SIZES_EQ(image, mask))) failed)
+        learnBackground(filter->image, filter->backgroundModel, filter->background);
+
+        filter->framesProcessed++;
+
+        gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
+        return gst_pad_push(filter->srcpad, buf);
+    }
+    else if (filter->framesProcessed == filter->nframesToLearnBG+1){
+        cvBGCodeBookClearStale( filter->backgroundModel, filter->backgroundModel->t/2, cvRect(0,0,0,0), 0 );
+    }
+#endif
+
     CvRect particlesBoundary;
     if (filter->initialized){
         getParticlesBoundary(filter->ConDens, &particlesBoundary, filter->width_image, filter->height_image);
     }
 
     if (!filter->initialized || filter->count < filter->min_points) {
+        if (filter->background){
+            filter->grey = segObjectBookBGDiff(filter->backgroundModel, filter->grey, filter->background);
+        }
         // automatic initialization
         IplImage* eig       = cvCreateImage(cvGetSize(filter->grey), 32, 1);
         IplImage* temp      = cvCreateImage(cvGetSize(filter->grey), 32, 1);
