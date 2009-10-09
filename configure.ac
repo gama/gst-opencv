@@ -20,6 +20,7 @@ AM_MAINTAINER_MODE
 AM_INIT_AUTOMAKE($PACKAGE, $VERSION)
 
 dnl make aclocal work in maintainer mode
+dnl ADDED COMMENT
 AC_SUBST(ACLOCAL_AMFLAGS, "-I m4")
 
 AM_CONFIG_HEADER(config.h)
