@@ -338,10 +338,9 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
 
 
-#if 0
+
     
     if (filter->framesProcessed <= filter->nframesToLearnBG){
-        // Assertion: model && CV_MAT_TYPE(image->type) == CV_8UC3 && (!mask || (CV_IS_MASK_ARR(mask) && CV_ARE_SIZES_EQ(image, mask))) failed)
         learnBackground(filter->image, filter->backgroundModel, filter->background);
 
         filter->framesProcessed++;
@@ -352,7 +351,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     else if (filter->framesProcessed == filter->nframesToLearnBG+1){
         cvBGCodeBookClearStale( filter->backgroundModel, filter->backgroundModel->t/2, cvRect(0,0,0,0), 0 );
     }
-#endif
+
 
     CvRect particlesBoundary;
     if (filter->initialized){
@@ -360,13 +359,15 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     }
 
     if (!filter->initialized || filter->count < filter->min_points) {
+        
+        // Set ROI in 'filter->grey' that defines the largest object found
         if (filter->background){
-            // Set ROI that defines the largest object found
             cvSetImageROI(
             	filter->grey, 
             	segObjectBookBGDiff(filter->backgroundModel, filter->grey, filter->background)
             );
         }
+
         // automatic initialization
         IplImage* eig       = cvCreateImage(cvGetSize(filter->grey), 32, 1);
         IplImage* temp      = cvCreateImage(cvGetSize(filter->grey), 32, 1);
