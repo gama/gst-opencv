@@ -361,7 +361,11 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
 
     if (!filter->initialized || filter->count < filter->min_points) {
         if (filter->background){
-            filter->grey = segObjectBookBGDiff(filter->backgroundModel, filter->grey, filter->background);
+            // Set ROI that defines the largest object found
+            cvSetImageROI(
+            	filter->grey, 
+            	segObjectBookBGDiff(filter->backgroundModel, filter->grey, filter->background)
+            );
         }
         // automatic initialization
         IplImage* eig       = cvCreateImage(cvGetSize(filter->grey), 32, 1);
