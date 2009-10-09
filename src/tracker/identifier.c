@@ -139,7 +139,7 @@ CvRect segObjectBookBGDiff(CvBGCodeBookModel* model, IplImage* rawImage,
             }
         }
         //cvSetImageROI(rawImage, cvRect(min_x, min_y, max_x, max_y));
-
+ 
         rectRoi = cvRect(min_x, min_y, max_x-min_x, max_y-min_y);
 
 //        cvRectangle(rawImage,
