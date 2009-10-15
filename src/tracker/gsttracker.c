@@ -82,7 +82,17 @@ static const float F[] = { 1, 1, 0, 1 };
 #define DEFAULT_STATE_DIM           4
 #define DEFAULT_MEASUREMENT_DIM     4
 #define DEFAULT_SAMPLE_SIZE         50
-#define DEFAULT_FRAMES_LEARN_BG     3
+
+#define DEFAULT_FRAMES_LEARN_BG     10
+#define DEFAULT_BGMODEL_MODMIN_0     3
+#define DEFAULT_BGMODEL_MODMIN_1     3
+#define DEFAULT_BGMODEL_MODMIN_2     3
+#define DEFAULT_BGMODEL_MODMAX_0     10
+#define DEFAULT_BGMODEL_MODMAX_1     10
+#define DEFAULT_BGMODEL_MODMAX_2     10
+#define DEFAULT_BGMODEL_CBBOUNDS_0   10
+#define DEFAULT_BGMODEL_CBBOUNDS_1   10
+#define DEFAULT_BGMODEL_CBBOUNDS_2   10
 
 enum {
     PROP_0,
@@ -132,6 +142,9 @@ gst_tracker_finalize(GObject * obj)
     if (filter->points[1])    cvFree(&filter->points[1]);
     if (filter->status)       cvFree(&filter->status);
     if (filter->verbose)      g_printf("\n");
+
+    if (filter->background)         cvReleaseImage(&filter->background);
+    if (filter->backgroundModel)    cvReleaseBGCodeBookModel(&filter->backgroundModel);
 
     G_OBJECT_CLASS(parent_class)->finalize(obj);
 }
@@ -222,7 +235,17 @@ gst_tracker_init(GstTracker * filter, GstTrackerClass * gclass)
 
     filter->nframesToLearnBG   = DEFAULT_FRAMES_LEARN_BG;
     filter->framesProcessed    = 0;
-
+    
+    filter->backgroundModel = cvCreateBGCodeBookModel();
+    filter->backgroundModel->modMin[0]      = DEFAULT_BGMODEL_MODMIN_0;
+    filter->backgroundModel->modMax[0]      = DEFAULT_BGMODEL_MODMAX_0;
+    filter->backgroundModel->modMin[1]      = DEFAULT_BGMODEL_MODMIN_1;
+    filter->backgroundModel->modMax[1]      = DEFAULT_BGMODEL_MODMAX_1;
+    filter->backgroundModel->modMin[2]      = DEFAULT_BGMODEL_MODMIN_2;
+    filter->backgroundModel->modMax[2]      = DEFAULT_BGMODEL_MODMAX_2;
+    filter->backgroundModel->cbBounds[0]    = DEFAULT_BGMODEL_CBBOUNDS_0;
+    filter->backgroundModel->cbBounds[1]    = DEFAULT_BGMODEL_CBBOUNDS_1;
+    filter->backgroundModel->cbBounds[2]    = DEFAULT_BGMODEL_CBBOUNDS_2;
 }
 
 static void
@@ -301,6 +324,7 @@ gst_tracker_set_caps(GstPad * pad, GstCaps * caps)
     filter->width_image   = width;
     filter->height_image  = height;
     filter->image         = cvCreateImage(cvSize(width, height), 8, 3);
+    filter->background    = cvCreateImage(cvSize(width, height), 8, 3);
     filter->grey          = cvCreateImage(cvSize(width, height), 8, 1);
     filter->prev_grey     = cvCreateImage(cvSize(width, height), 8, 1);
     filter->pyramid       = cvCreateImage(cvSize(width, height), 8, 1);
@@ -311,12 +335,10 @@ gst_tracker_set_caps(GstPad * pad, GstCaps * caps)
     filter->flags         = 0;
     filter->initialized   = FALSE;
 
-    
     filter->ConDens = initCondensation(filter->state_dim, filter->measurement_dim, filter->sample_size, filter->width_image, filter->height_image);
 
     otherpad = (pad == filter->srcpad) ? filter->sinkpad : filter->srcpad;
     gst_object_unref(filter);
-
 
     return gst_pad_set_caps(otherpad, caps);
 }
@@ -338,11 +360,11 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
 
 
-
-    
     if (filter->framesProcessed <= filter->nframesToLearnBG){
-        learnBackground(filter->image, filter->backgroundModel, filter->background);
 
+        // Background update
+        cvCvtColor( filter->image, filter->background, CV_BGR2YCrCb );
+        cvBGCodeBookUpdate( filter->backgroundModel, filter->background, cvRect(0,0,0,0), 0 );
         filter->framesProcessed++;
 
         gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
@@ -351,7 +373,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     else if (filter->framesProcessed == filter->nframesToLearnBG+1){
         cvBGCodeBookClearStale( filter->backgroundModel, filter->backgroundModel->t/2, cvRect(0,0,0,0), 0 );
     }
-
+    
 
     CvRect particlesBoundary;
     if (filter->initialized){
@@ -362,10 +384,11 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
         
         // Set ROI in 'filter->grey' that defines the largest object found
         if (filter->background){
-            cvSetImageROI(
-            	filter->grey, 
-            	segObjectBookBGDiff(filter->backgroundModel, filter->grey, filter->background)
-            );
+	    //TODO: usar o rectRoi para definir a area de interesse, e comentar a parte de 
+	    // setar como preto o pixel de fundo da funcao (segObjectBookBGDiff).
+
+            CvRect rectRoi = segObjectBookBGDiff(filter->backgroundModel, filter->image, filter->background);
+	    printf("BG new\n");
         }
 
         // automatic initialization

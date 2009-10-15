@@ -4,10 +4,11 @@
 #include "cv.h"
 #include "highgui.h"
 #include "cvaux.h"
+#include <stdio.h>
 
-int learnBackground(IplImage* image, CvBGCodeBookModel* model, IplImage* background);
+//int learnBackground(IplImage* image, CvBGCodeBookModel* model, IplImage* background);
 //IplImage*  segObjectBookBGDiff(CvBGCodeBookModel* model, IplImage* rawImage, IplImage* background);
 CvRect segObjectBookBGDiff(CvBGCodeBookModel* model, IplImage* rawImage, IplImage* yuvImage);
-float onlyBiggerObject(IplImage* frameBW);
+//float onlyBiggerObject(IplImage* frameBW);
 
 #endif
