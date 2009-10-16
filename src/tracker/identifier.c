@@ -153,23 +153,83 @@ CvRect segObjectBookBGDiff(CvBGCodeBookModel* model, IplImage* rawImage,
  
         rectRoi = cvRect(min_x, min_y, max_x-min_x, max_y-min_y);
 
-//        cvRectangle(rawImage,
-//            cvPoint(min_x, min_y),
-//            cvPoint(max_x, max_y),
-//            CV_RGB(255, 0, 0), 1, 0, 0 );
+        #if 0 //desenha o retangulo
+        cvRectangle(rawImage,
+            cvPoint(min_x, min_y),
+            cvPoint(max_x, max_y),
+            CV_RGB(0, 255, 0), 1, 0, 0 );
+        #endif
     }
 
     // Cola pixeis de objeto na imagem retornada
-    #if 0 
+    #if 0
     for(i = 0; i < temp->height; i++){
         for(j = 0; j < temp->width; j++){
+
+            //if(j<rectRoi.x || j>rectRoi.x+rectRoi.width) //&&
+                //(i<rectRoi.y || i>rectRoi.y+rectRoi.height) )
+
             if(cvGet2D(temp,i,j).val[0] == 0)
                 cvSet2D(rawImage,i,j,cvScalarAll(0));
         }
     }
     #endif
-    
+
+
+
+/*
+        cvRectangle(rawImage,
+            cvPoint(rectRoi.x, rectRoi.y),
+            cvPoint(rectRoi.width+rectRoi.x, rectRoi.height+rectRoi.y),
+            CV_RGB(0, 0, 255), 1, 0, 0 );
+*/
+
+
     cvReleaseImage(&temp);
 //printf("ROI: %i %i %i %i\n", rectRoi.x, rectRoi.y, rectRoi.width, rectRoi.height);
     return rectRoi;
+}
+
+static int edge_thresh = 1;
+
+/*
+IplImage *image = 0, *cedge = 0, *gray = 0, *edge = 0;
+*/
+
+// define a trackbar callback
+void canny(IplImage *image)
+{
+
+    // Create the output image
+    IplImage *cedge = cvCreateImage(cvSize(image->width,image->height), IPL_DEPTH_8U, 3);
+
+    // Convert to grayscale
+    IplImage *gray = cvCreateImage(cvSize(image->width,image->height), IPL_DEPTH_8U, 1);
+    IplImage *edge = cvCreateImage(cvSize(image->width,image->height), IPL_DEPTH_8U, 1);
+    cvCvtColor(image, gray, CV_BGR2GRAY);
+
+    cvSmooth( gray, edge, CV_BLUR, 3, 3, 0, 0 );
+    cvNot( gray, edge );
+
+    // Run the edge detector on grayscale
+    cvCanny(gray, edge, (float)edge_thresh, (float)edge_thresh*3, 3);
+
+    cvZero( cedge );
+    // copy edge points
+    cvCopy( image, cedge, edge );
+
+    cvReleaseImage(&cedge);
+    cvReleaseImage(&gray);
+    cvReleaseImage(&edge);
+}
+
+
+
+
+
+
+
+
+CvRect  getRoiMotion( IplImage* img, IplImage* motionHist, int diff_threshold ){
+    return cvRect(0,0,0,0);
 }

@@ -83,7 +83,7 @@ static const float F[] = { 1, 1, 0, 1 };
 #define DEFAULT_MEASUREMENT_DIM     4
 #define DEFAULT_SAMPLE_SIZE         50
 
-#define DEFAULT_FRAMES_LEARN_BG     10
+#define DEFAULT_FRAMES_LEARN_BG     50
 #define DEFAULT_BGMODEL_MODMIN_0     3
 #define DEFAULT_BGMODEL_MODMIN_1     3
 #define DEFAULT_BGMODEL_MODMIN_2     3
@@ -379,25 +379,29 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     if (filter->initialized){
         getParticlesBoundary(filter->ConDens, &particlesBoundary, filter->width_image, filter->height_image);
     }
-
+    
     if (!filter->initialized || filter->count < filter->min_points) {
         
         if (filter->background){
+
             // automatic initialization
             IplImage* eig       = cvCreateImage(cvGetSize(filter->grey), 32, 1);
             IplImage* temp      = cvCreateImage(cvGetSize(filter->grey), 32, 1);
 
-            // Set ROI in 'filter->grey' that defines the largest object found
-            CvRect rectRoi;
+            // Get ROI that defines the largest object found
+            CvRect rectRoi = segObjectBookBGDiff(filter->backgroundModel,
+                filter->image, filter->background);
 
-            //TODO: usar o rectRoi para definir a area de interesse, e comentar a parte de 
-            // setar como preto o pixel de fundo da funcao (segObjectBookBGDiff).
-
-            rectRoi = segObjectBookBGDiff(filter->backgroundModel, filter->image, filter->background);
+            // Rect draw
+            cvRectangle(filter->image,
+                cvPoint(rectRoi.x, rectRoi.y),
+                cvPoint(rectRoi.x+rectRoi.width, rectRoi.y+rectRoi.height),
+                CV_RGB(255, 0, 255), 1, 0, 0 );
             printf("BG new\n");
 
-                    
+
             if (rectRoi.width != 0 && rectRoi.height != 0){
+
                 cvSetImageROI( filter->grey, rectRoi );
                 cvSetImageROI( eig, rectRoi );
                 cvSetImageROI( temp, rectRoi );
@@ -409,17 +413,16 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
                 filter->prev_avg_x = -1.0;
                 cvGoodFeaturesToTrack(filter->grey, eig, temp, filter->points[1], &(filter->count), quality,
                                       min_distance, 0, 3, 0, 0.04);
-                // if (filter->verbose) g_printf("[lkoptioncalflow.chain][NOT initialized] filter->count: %d\n", filter->count);
-                cvFindCornerSubPix(filter->grey, filter->points[1], filter->count, cvSize(filter->win_size, filter->win_size),
-                                   cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03));
-
+                //cvFindCornerSubPix(filter->grey, filter->points[1], filter->count, cvSize(filter->win_size, filter->win_size),
+                //                   cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03));
 
                 cvResetImageROI( filter->grey );
 
-                cvReleaseImage(&eig);
-                cvReleaseImage(&temp);
             }
-        }
+
+            cvReleaseImage(&eig);
+            cvReleaseImage(&temp);
+        }//if brackround
     } else {
         int i, k;
 
