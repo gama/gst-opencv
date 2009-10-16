@@ -382,30 +382,44 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
 
     if (!filter->initialized || filter->count < filter->min_points) {
         
-        // Set ROI in 'filter->grey' that defines the largest object found
         if (filter->background){
-	    //TODO: usar o rectRoi para definir a area de interesse, e comentar a parte de 
-	    // setar como preto o pixel de fundo da funcao (segObjectBookBGDiff).
+            // automatic initialization
+            IplImage* eig       = cvCreateImage(cvGetSize(filter->grey), 32, 1);
+            IplImage* temp      = cvCreateImage(cvGetSize(filter->grey), 32, 1);
 
-            CvRect rectRoi = segObjectBookBGDiff(filter->backgroundModel, filter->image, filter->background);
-	    printf("BG new\n");
+            // Set ROI in 'filter->grey' that defines the largest object found
+            CvRect rectRoi;
+
+            //TODO: usar o rectRoi para definir a area de interesse, e comentar a parte de 
+            // setar como preto o pixel de fundo da funcao (segObjectBookBGDiff).
+
+            rectRoi = segObjectBookBGDiff(filter->backgroundModel, filter->image, filter->background);
+            printf("BG new\n");
+
+                    
+            if (rectRoi.width != 0 && rectRoi.height != 0){
+                cvSetImageROI( filter->grey, rectRoi );
+                cvSetImageROI( eig, rectRoi );
+                cvSetImageROI( temp, rectRoi );
+        
+                double quality      = 0.01;
+                double min_distance = 10;
+
+                filter->count = filter->max_points;
+                filter->prev_avg_x = -1.0;
+                cvGoodFeaturesToTrack(filter->grey, eig, temp, filter->points[1], &(filter->count), quality,
+                                      min_distance, 0, 3, 0, 0.04);
+                // if (filter->verbose) g_printf("[lkoptioncalflow.chain][NOT initialized] filter->count: %d\n", filter->count);
+                cvFindCornerSubPix(filter->grey, filter->points[1], filter->count, cvSize(filter->win_size, filter->win_size),
+                                   cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03));
+
+
+                cvResetImageROI( filter->grey );
+
+                cvReleaseImage(&eig);
+                cvReleaseImage(&temp);
+            }
         }
-
-        // automatic initialization
-        IplImage* eig       = cvCreateImage(cvGetSize(filter->grey), 32, 1);
-        IplImage* temp      = cvCreateImage(cvGetSize(filter->grey), 32, 1);
-        double quality      = 0.01;
-        double min_distance = 10;
-
-        filter->count = filter->max_points;
-        filter->prev_avg_x = -1.0;
-        cvGoodFeaturesToTrack(filter->grey, eig, temp, filter->points[1], &(filter->count), quality,
-                              min_distance, 0, 3, 0, 0.04);
-        // if (filter->verbose) g_printf("[lkoptioncalflow.chain][NOT initialized] filter->count: %d\n", filter->count);
-        cvFindCornerSubPix(filter->grey, filter->points[1], filter->count, cvSize(filter->win_size, filter->win_size),
-                           cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03));
-        cvReleaseImage(&eig);
-        cvReleaseImage(&temp);
     } else {
         int i, k;
 

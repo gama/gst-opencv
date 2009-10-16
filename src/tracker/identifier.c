@@ -160,13 +160,14 @@ CvRect segObjectBookBGDiff(CvBGCodeBookModel* model, IplImage* rawImage,
     }
 
     // Cola pixeis de objeto na imagem retornada
+    #if 0 
     for(i = 0; i < temp->height; i++){
         for(j = 0; j < temp->width; j++){
             if(cvGet2D(temp,i,j).val[0] == 0)
                 cvSet2D(rawImage,i,j,cvScalarAll(0));
         }
     }
-
+    #endif
     
     cvReleaseImage(&temp);
 //printf("ROI: %i %i %i %i\n", rectRoi.x, rectRoi.y, rectRoi.width, rectRoi.height);
