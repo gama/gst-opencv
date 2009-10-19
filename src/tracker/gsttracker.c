@@ -392,32 +392,33 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
             CvRect rectRoi = segObjectBookBGDiff(filter->backgroundModel,
                 filter->image, filter->background);
 
-            // Rect draw
-            cvRectangle(filter->image,
-                cvPoint(rectRoi.x, rectRoi.y),
-                cvPoint(rectRoi.x+rectRoi.width, rectRoi.y+rectRoi.height),
-                CV_RGB(255, 0, 255), 1, 0, 0 );
-            printf("BG new\n");
-
-
             if (rectRoi.width != 0 && rectRoi.height != 0){
-
-                cvSetImageROI( filter->grey, rectRoi );
-                cvSetImageROI( eig, rectRoi );
-                cvSetImageROI( temp, rectRoi );
         
+                int i;
                 double quality      = 0.01;
                 double min_distance = 10;
+
+                cvSetImageROI( filter->grey, rectRoi );
 
                 filter->count = filter->max_points;
                 filter->prev_avg_x = -1.0;
                 cvGoodFeaturesToTrack(filter->grey, eig, temp, filter->points[1], &(filter->count), quality,
                                       min_distance, 0, 3, 0, 0.04);
-                //cvFindCornerSubPix(filter->grey, filter->points[1], filter->count, cvSize(filter->win_size, filter->win_size),
-                //                   cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03));
+                cvFindCornerSubPix(filter->grey, filter->points[1], filter->count, cvSize(filter->win_size, filter->win_size),
+                                   cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03));
 
+                for(i = filter->count; i>=0; --i){
+                    filter->points[1][i].x += rectRoi.x;
+                    filter->points[1][i].y += rectRoi.y;
+                }
+
+                // Rect draw
+                cvRectangle(filter->image,
+                    cvPoint(rectRoi.x, rectRoi.y),
+                    cvPoint(rectRoi.x+rectRoi.width, rectRoi.y+rectRoi.height),
+                    CV_RGB(255, 0, 255), 3, 0, 0 );
+            
                 cvResetImageROI( filter->grey );
-
             }
 
             cvReleaseImage(&eig);
