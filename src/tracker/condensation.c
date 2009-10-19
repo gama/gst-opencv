@@ -98,7 +98,7 @@ CvConDensation *initCondensation(int state_vec_dim, int measurement_vec_dim, int
 }
 
 
-void resample(IplImage* image, CvConDensation* ConDens, double measurement_x, double measurement_y, double *stdev_x, double *stdev_y){	
+void resample(IplImage* image, CvConDensation* ConDens, double measurement_x, double measurement_y, int show_particles, double *stdev_x, double *stdev_y){	
     int i;
     double var_x, var_y, dist;
 	double *sample_x; 
@@ -135,19 +135,18 @@ void resample(IplImage* image, CvConDensation* ConDens, double measurement_x, do
         else ConDens->flConfidence[i] =  1/pow(dist,2);
 #endif
 
-#if 1
+      if (show_particles == 1)
         cvCircle( image, cvPoint(ConDens->flSamples[i][0], ConDens->flSamples[i][1]), 10*ConDens->flConfidence[i], CV_RGB(0,0,255), 3, 8,0);
-#endif		
 
 	}
     free(sample_x);
     free(sample_y);
 }
    
-void updateCondensation(IplImage* image, CvConDensation* ConDens, double measurement_x, double measurement_y, double *predicted_x, double *predicted_y ){
+void updateCondensation(IplImage* image, CvConDensation* ConDens, double measurement_x, double measurement_y, int show_particles, double *predicted_x, double *predicted_y){
     double stdev_x, stdev_y;
 
-	resample(image, ConDens, measurement_x, measurement_y, &stdev_x, &stdev_y);
+	resample(image, ConDens, measurement_x, measurement_y, show_particles, &stdev_x, &stdev_y);
 	cvConDensUpdateByTime(ConDens);
 	*predicted_x = ConDens->State[0];
     *predicted_y = ConDens->State[1];

@@ -82,8 +82,12 @@ static const float F[] = { 1, 1, 0, 1 };
 #define DEFAULT_STATE_DIM           4
 #define DEFAULT_MEASUREMENT_DIM     4
 #define DEFAULT_SAMPLE_SIZE         50
+#define DEFAULT_MAX_SAMPLE_SIZE     10*DEFAULT_SAMPLE_SIZE
 
-#define DEFAULT_FRAMES_LEARN_BG     50
+#define DEFAULT_FRAMES_LEARN_BG         50
+#define DEFAULT_MIN_FRAMES_TO_LEARN_BG  5
+#define DEFAULT_MAX_FRAMES_TO_LEARN_BG  200 
+
 #define DEFAULT_BGMODEL_MODMIN_0     3
 #define DEFAULT_BGMODEL_MODMIN_1     3
 #define DEFAULT_BGMODEL_MODMIN_2     3
@@ -100,7 +104,12 @@ enum {
     PROP_MAX_POINTS,
     PROP_MIN_POINTS,
     PROP_WIN_SIZE,
-    PROP_MOVEMENT_THRESHOLD
+    PROP_MOVEMENT_THRESHOLD,
+    PROP_SHOW_PARTICLES,
+    PROP_SHOW_FEATURES,
+    PROP_SAMPLE_SIZE,
+    PROP_FRAMES_LEARN_BG
+
 };
 
 /* the capabilities of the inputs and outputs.
@@ -182,6 +191,14 @@ gst_tracker_class_init(GstTrackerClass * klass)
                                     g_param_spec_boolean("verbose", "Verbose", "Sets whether the movement direction should be printed to the standard output.",
                                                          TRUE, G_PARAM_READWRITE));
 
+    g_object_class_install_property(gobject_class, PROP_SHOW_PARTICLES,
+                                    g_param_spec_boolean("show-particles", "Show particles", "Sets whether particles location should be printed to the video.",
+                                                         TRUE, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_SHOW_FEATURES,
+                                    g_param_spec_boolean("show-features", "Show features", "Sets whether features location should be printed to the video.",
+                                                         TRUE, G_PARAM_READWRITE));
+
     g_object_class_install_property(gobject_class, PROP_MAX_POINTS,
                                     g_param_spec_uint("max-points", "Max points", "Maximum number of feature points.",
                                                       0, 2 * DEFAULT_MAX_POINTS, DEFAULT_MAX_POINTS, G_PARAM_READWRITE));
@@ -197,6 +214,14 @@ gst_tracker_class_init(GstTrackerClass * klass)
     g_object_class_install_property(gobject_class, PROP_MOVEMENT_THRESHOLD,
                                     g_param_spec_float("movement-threshold", "Movement threshold", "Threshold that defines what constitutes a left (< -THRESHOLD) or right (> THRESHOLD) movement (in average # of pixels).",
                                                        0.0, 20 * DEFAULT_MOVEMENT_THRESHOLD, DEFAULT_MOVEMENT_THRESHOLD, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_SAMPLE_SIZE,
+                                    g_param_spec_uint("sample-size", "Sample size", "Number of particles used in Condensation", 0, DEFAULT_MAX_SAMPLE_SIZE, DEFAULT_SAMPLE_SIZE, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_FRAMES_LEARN_BG,
+                                    g_param_spec_uint("frames-learn-bg", "Number of frames to learn bg", "Number of frames used to learn the backgound", DEFAULT_MIN_FRAMES_TO_LEARN_BG, DEFAULT_MAX_FRAMES_TO_LEARN_BG, DEFAULT_FRAMES_LEARN_BG, G_PARAM_READWRITE));
+
+
 }
 
 /* initialize the new element
@@ -224,6 +249,8 @@ gst_tracker_init(GstTracker * filter, GstTrackerClass * gclass)
 
     // set default properties
     filter->verbose            = TRUE;
+    filter->show_particles     = TRUE;
+    filter->show_features      = TRUE;
     filter->max_points         = DEFAULT_MAX_POINTS;
     filter->min_points         = DEFAULT_MIN_POINTS;
     filter->win_size           = DEFAULT_WIN_SIZE;
@@ -270,6 +297,19 @@ gst_tracker_set_property(GObject *object, guint prop_id,
         case PROP_MOVEMENT_THRESHOLD:
             filter->win_size = g_value_get_float(value);
             break;
+        case PROP_SHOW_PARTICLES:
+            filter->show_particles = g_value_get_boolean(value);
+            break;
+        case PROP_SHOW_FEATURES:
+            filter->show_features = g_value_get_boolean(value);
+            break;
+        case PROP_SAMPLE_SIZE:
+            filter->sample_size = g_value_get_uint(value);
+            break;
+         case PROP_FRAMES_LEARN_BG:
+            filter->nframesToLearnBG = g_value_get_uint(value);
+            break;
+ 
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
             break;
@@ -298,6 +338,19 @@ gst_tracker_get_property(GObject * object, guint prop_id,
         case PROP_MOVEMENT_THRESHOLD:
             g_value_set_float(value, filter->movement_threshold);
             break;
+        case PROP_SHOW_PARTICLES:
+            g_value_set_boolean(value, filter->show_particles);
+            break;
+        case PROP_SHOW_FEATURES:
+            g_value_set_boolean(value, filter->show_features);
+            break;
+        case PROP_SAMPLE_SIZE:
+            g_value_set_uint(value, filter->sample_size);
+            break;
+         case PROP_FRAMES_LEARN_BG:
+            g_value_set_uint(value, filter->nframesToLearnBG);
+            break;
+ 
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
             break;
@@ -436,12 +489,14 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
 
         double measurement_x, measurement_y;
         centroid(filter->points[1], filter->count, &measurement_x, &measurement_y);
-        cvCircle( filter->image, cvPoint(measurement_x, measurement_y), 3, CV_RGB(255,0,0), -1, 8,0);
+        if (filter->show_particles)
+            cvCircle( filter->image, cvPoint(measurement_x, measurement_y), 3, CV_RGB(255,0,0), -1, 8,0);
 
         double predicted_x, predicted_y;
 
-        updateCondensation(filter->image, filter->ConDens,  measurement_x, measurement_y, &predicted_x, &predicted_y); // points is the measured points
-        cvCircle( filter->image, cvPoint(predicted_x, predicted_y), 3, CV_RGB(0,255,0), -1, 8,0);
+        updateCondensation(filter->image, filter->ConDens,  measurement_x, measurement_y, filter->show_particles, &predicted_x, &predicted_y); // points is the measured points
+        if (filter->show_features)
+            cvCircle( filter->image, cvPoint(predicted_x, predicted_y), 3, CV_RGB(0,255,0), -1, 8,0);
  
         for (i = k = 0; i < filter->count; ++i) {
             if (!filter->status[i])
@@ -456,6 +511,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
             filter->points[1][k++] = filter->points[1][i];
             avg_x += (float) filter->points[1][i].x;
 
+        if (filter->show_features)
             cvCircle(filter->image, cvPointFrom32f(filter->points[1][i]), 3, CV_RGB(255, 255, 0), -1, 8, 0);
         }
         filter->count = k;
