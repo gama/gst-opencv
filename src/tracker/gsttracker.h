@@ -81,10 +81,13 @@ struct _GstTracker
 
     // filter parameter
     gboolean verbose;
+    gboolean show_particles;
+    gboolean show_features;
     guint max_points;
     guint min_points;
     guint win_size;
     float movement_threshold;
+
 
     CvConDensation* ConDens;
     int state_dim, measurement_dim;
