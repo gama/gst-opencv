@@ -1,13 +1,13 @@
 #include "identifier.h"
 
-float onlyBiggerObject(IplImage* frameBW){
+CvRect onlyBiggerObject(IplImage* frameBW){
 
     CvSeq *c, *cBig;
-    CvMemStorage* tempStorage = cvCreateMemStorage(0);
+    CvMemStorage *tempStorage = cvCreateMemStorage(0);
     CvMat mstub;
     CvMat *mask = cvGetMat(frameBW, &mstub, 0, 0);
     CvPoint offset = cvPoint(0,0);
-    float perc = 0.;
+    CvRect rectRoi = cvRect(0, 0, 0, 0);
 
     CvContourScanner scanner = cvStartFindContours(mask, tempStorage,
         sizeof(CvContour), CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE,offset );
@@ -28,50 +28,24 @@ float onlyBiggerObject(IplImage* frameBW){
         cvZero( mask );
         cvDrawContours( mask, cBig, cvScalarAll(255), cvScalarAll(0), -1,
                 CV_FILLED, 8, cvPoint(-offset.x,-offset.y));
-
-        // Returns the percentage of area occupied by the object
-        perc = (float) areaBig/(frameBW->height*frameBW->width);
+        rectRoi = cvBoundingRect(cBig, 0);
     }
 
     cvReleaseMemStorage(&tempStorage);
-
-    return perc;
+    return rectRoi;
 }
 
 CvRect segObjectBookBGDiff(CvBGCodeBookModel* model, IplImage* rawImage,
         IplImage* yuvImage){
 
-    int i, j;
-    CvRect rectRoi = cvRect(0, 0, 0, 0);
+    CvRect rectRoi;
     IplImage* temp = cvCreateImage(cvGetSize(rawImage), IPL_DEPTH_8U, 1);
     
-    // Bbackground subtraction
-    cvCvtColor( rawImage, yuvImage, CV_BGR2YCrCb ); //YUV For codebook method
+    // Background subtraction
+    cvCvtColor( rawImage, yuvImage, CV_BGR2YCrCb );
     cvBGCodeBookDiff( model, yuvImage, temp, cvRect(0,0,0,0) );
-    cvSegmentFGMask(temp, 1, 4.f, 0, cvPoint(0,0)); //CH:1 (not convexHull)
-
-    // The greater area object of segmented image
-    float percentualOcupado = onlyBiggerObject(temp);
-
-    // Roi of greater area object
-    if(percentualOcupado){
-        int max_x = 0;
-        int max_y = 0;
-        int min_x = temp->width;
-        int min_y = temp->height;
-        for(i = 0; i < temp->height; i++){
-            for(j = 0; j < temp->width; j++){
-                if(cvGet2D(temp,i,j).val[0] != 0){
-                    if(min_x > j) min_x = j;
-                    if(min_y > i) min_y = i;
-                    if(max_x < j) max_x = j;
-                    if(max_y < i) max_y = i;
-                }
-            }
-        }
- 
-        rectRoi = cvRect(min_x, min_y, max_x-min_x, max_y-min_y);
-    }
+    cvSegmentFGMask(temp, 1, 4.f, 0, cvPoint(0,0));
+    rectRoi = onlyBiggerObject(temp);
 
     cvReleaseImage(&temp);
     return rectRoi;

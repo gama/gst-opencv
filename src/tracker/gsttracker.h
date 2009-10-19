@@ -51,6 +51,7 @@
 #include <highgui.h>
 #include <cvaux.h>
 
+
 G_BEGIN_DECLS
 /* #defines don't like whitespacey bits */
 #define GST_TYPE_TRACKER \
@@ -83,6 +84,7 @@ struct _GstTracker
     gboolean verbose;
     gboolean show_particles;
     gboolean show_features;
+    gboolean show_features_box;
     guint max_points;
     guint min_points;
     guint win_size;
