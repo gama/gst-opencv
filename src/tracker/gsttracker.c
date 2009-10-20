@@ -457,21 +457,32 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
                 filter->image, filter->background);
 
             if (rectRoi.width != 0 && rectRoi.height != 0){
-        
+
                 int i;
                 double quality      = 0.01;
                 double min_distance = 10;
 
                 cvSetImageROI( filter->grey, rectRoi );
 
+
                 filter->count = filter->max_points;
                 filter->prev_avg_x = -1.0;
+
                 cvGoodFeaturesToTrack(filter->grey, eig, temp, filter->points[1], &(filter->count), quality,
                                       min_distance, 0, 3, 0, 0.04);
-                cvFindCornerSubPix(filter->grey, filter->points[1], filter->count, cvSize(filter->win_size, filter->win_size),
+
+                int win_size;
+                // image size must to be greater than filter->win_size*2+5 see /home/erickson/Desktop/OpenCV-2.0.0/src/cv/cvcornersubpix.cpp, line 92
+                if (rectRoi.width <= (filter->win_size*2+5) || rectRoi.height <= (filter->win_size*2+5)){
+                    win_size = rectRoi.width < rectRoi.height ? rectRoi.width : rectRoi.height;
+                    win_size = (win_size-5)/2;
+
+                }else win_size = filter->win_size;
+
+                cvFindCornerSubPix(filter->grey, filter->points[1], filter->count, cvSize(win_size, win_size),
                                    cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03));
 
-                for(i = filter->count; i>=0; --i){
+                for(i = 0; i < filter->count; i++){
                     filter->points[1][i].x += rectRoi.x;
                     filter->points[1][i].y += rectRoi.y;
                 }
