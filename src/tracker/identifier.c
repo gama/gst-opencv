@@ -51,29 +51,29 @@ CvRect segObjectBookBGDiff(CvBGCodeBookModel* model, IplImage* rawImage,
     return rectRoi;
 }
 
-void canny(IplImage *image){
+void canny(IplImage *image, CvRect rect, int edge_thresh, int smooth){
 
-    static int edge_thresh = 1;
-
-    // Create the output image
-    IplImage *cedge = cvCreateImage(cvSize(image->width,image->height), IPL_DEPTH_8U, 3);
+    if(rect.height == 0 || rect.width == 0) return;
+    
+    CvRect rectOrigin = (image->roi != 0x0)?cvROIToRect(*image->roi):cvRect(0, 0, 0, 0);
+    cvSetImageROI(image, rect);
 
     // Convert to grayscale
-    IplImage *gray = cvCreateImage(cvSize(image->width,image->height), IPL_DEPTH_8U, 1);
-    IplImage *edge = cvCreateImage(cvSize(image->width,image->height), IPL_DEPTH_8U, 1);
-    cvCvtColor(image, gray, CV_BGR2GRAY);
+    IplImage *gray = cvCreateImage(cvSize(rect.width,rect.height), IPL_DEPTH_8U, 1);
+    cvCvtColor(image, gray, CV_RGB2GRAY);
 
-    cvSmooth( gray, edge, CV_BLUR, 3, 3, 0, 0 );
-    cvNot( gray, edge );
+
+    // Tratament
+    cvSmooth( gray, gray, CV_BLUR, smooth, smooth, 0, 0 );
+    cvNot( gray, gray );
 
     // Run the edge detector on grayscale
-    cvCanny(gray, edge, (float)edge_thresh, (float)edge_thresh*3, 3);
+    cvCanny(gray, gray, (float)edge_thresh, (float)edge_thresh*3, 3);
 
-    cvZero( cedge );
-    // copy edge points
-    cvCopy( image, cedge, edge );
-
-    cvReleaseImage(&cedge);
+    // Convert to RGBscale
+    cvCvtColor(gray,image,CV_GRAY2RGB);
     cvReleaseImage(&gray);
-    cvReleaseImage(&edge);
+
+    if(rectOrigin.height != 0) cvSetImageROI(image, rectOrigin);
+    else cvResetImageROI( image );
 }

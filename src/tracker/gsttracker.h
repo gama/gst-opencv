@@ -85,6 +85,7 @@ struct _GstTracker
     gboolean show_particles;
     gboolean show_features;
     gboolean show_features_box;
+    gboolean show_canny;
     guint max_points;
     guint min_points;
     guint win_size;
