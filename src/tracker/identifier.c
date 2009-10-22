@@ -1,6 +1,6 @@
 #include "identifier.h"
 
-CvRect onlyBiggerObject(IplImage* frameBW){
+CvRect onlyBiggerObject( IplImage* frameBW ){
 
     CvSeq *c, *cBig;
     CvMemStorage *tempStorage = cvCreateMemStorage(0);
@@ -35,8 +35,8 @@ CvRect onlyBiggerObject(IplImage* frameBW){
     return rectRoi;
 }
 
-CvRect segObjectBookBGDiff(CvBGCodeBookModel* model, IplImage* rawImage,
-        IplImage* yuvImage){
+CvRect segObjectBookBGDiff( CvBGCodeBookModel* model, IplImage* rawImage,
+        IplImage* yuvImage ){
 
     CvRect rectRoi;
     IplImage* temp = cvCreateImage(cvGetSize(rawImage), IPL_DEPTH_8U, 1);
@@ -51,29 +51,30 @@ CvRect segObjectBookBGDiff(CvBGCodeBookModel* model, IplImage* rawImage,
     return rectRoi;
 }
 
-void canny(IplImage *image, CvRect rect, int edge_thresh, int smooth){
+void showBorder( IplImage *srcGray, IplImage *dst, CvScalar borderColor,
+        int edge_thresh, int smooth, int borderIncreaseSize ){
 
-    if(rect.height == 0 || rect.width == 0) return;
+    CvSize size;
+    IplImage *edge, *workGray;
+    if( srcGray->roi ){
+        size = cvSize( srcGray->roi->width,srcGray->roi->height );
+        cvSetImageROI(dst, cvRect( srcGray->roi->xOffset, srcGray->roi->yOffset,
+                srcGray->roi->width, srcGray->roi->height ));
+    }else{
+        size = cvSize(srcGray->width,srcGray->height);
+    }
+    edge        = cvCreateImage(size, IPL_DEPTH_8U, 1);
+    workGray    = cvCreateImage(size, IPL_DEPTH_8U, 1);
+
+    cvSmooth( srcGray, workGray, CV_BLUR, smooth, smooth, 0, 0 );
+    cvNot( workGray, workGray );
+
+    cvCanny( workGray, edge, (float)edge_thresh, (float)edge_thresh*3, 3 );
+
+    if( borderIncreaseSize ) cvDilate( edge, edge, 0, borderIncreaseSize );
+    cvAddS( dst, borderColor, dst, edge );
     
-    CvRect rectOrigin = (image->roi != 0x0)?cvROIToRect(*image->roi):cvRect(0, 0, 0, 0);
-    cvSetImageROI(image, rect);
-
-    // Convert to grayscale
-    IplImage *gray = cvCreateImage(cvSize(rect.width,rect.height), IPL_DEPTH_8U, 1);
-    cvCvtColor(image, gray, CV_RGB2GRAY);
-
-
-    // Tratament
-    cvSmooth( gray, gray, CV_BLUR, smooth, smooth, 0, 0 );
-    cvNot( gray, gray );
-
-    // Run the edge detector on grayscale
-    cvCanny(gray, gray, (float)edge_thresh, (float)edge_thresh*3, 3);
-
-    // Convert to RGBscale
-    cvCvtColor(gray,image,CV_GRAY2RGB);
-    cvReleaseImage(&gray);
-
-    if(rectOrigin.height != 0) cvSetImageROI(image, rectOrigin);
-    else cvResetImageROI( image );
+    cvReleaseImage( &edge );
+    cvReleaseImage( &workGray );
+    cvResetImageROI( dst );
 }

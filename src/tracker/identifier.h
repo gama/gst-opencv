@@ -8,6 +8,6 @@
 #include <time.h>
 
 CvRect segObjectBookBGDiff(CvBGCodeBookModel* model, IplImage* rawImage, IplImage* yuvImage);
-void canny(IplImage *image, CvRect rect, int edge_thresh, int smooth);
+void showBorder( IplImage *srcGray, IplImage *dst, CvScalar borderColor, int edge_thresh, int smooth, int borderIncreaseSize );
 
 #endif

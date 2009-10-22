@@ -108,7 +108,7 @@ enum {
     PROP_SHOW_PARTICLES,
     PROP_SHOW_FEATURES,
     PROP_SHOW_FEATURES_BOX,
-    PROP_SHOW_CANNY,
+    PROP_SHOW_BORDERS,
     PROP_SAMPLE_SIZE,
     PROP_FRAMES_LEARN_BG
 };
@@ -204,8 +204,8 @@ gst_tracker_class_init(GstTrackerClass * klass)
                                     g_param_spec_boolean("show-features-box", "Show features box", "Sets whether features box should be printed to the video.",
                                                          FALSE, G_PARAM_READWRITE));
 
-    g_object_class_install_property(gobject_class, PROP_SHOW_CANNY,
-                                    g_param_spec_boolean("show-canny", "Show canny in features box", "Sets whether canny in features box should be printed to the video.",
+    g_object_class_install_property(gobject_class, PROP_SHOW_BORDERS,
+                                    g_param_spec_boolean("show-borders", "Show borders in features box", "Sets whether borders in features box should be printed to the video.",
                                                          FALSE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_MAX_POINTS,
@@ -261,7 +261,7 @@ gst_tracker_init(GstTracker * filter, GstTrackerClass * gclass)
     filter->show_particles     = TRUE;
     filter->show_features      = TRUE;
     filter->show_features_box  = FALSE;
-    filter->show_canny         = FALSE;
+    filter->show_borders         = FALSE;
     filter->max_points         = DEFAULT_MAX_POINTS;
     filter->min_points         = DEFAULT_MIN_POINTS;
     filter->win_size           = DEFAULT_WIN_SIZE;
@@ -317,8 +317,8 @@ gst_tracker_set_property(GObject *object, guint prop_id,
         case PROP_SHOW_FEATURES_BOX:
             filter->show_features_box = g_value_get_boolean(value);
             break;
-        case PROP_SHOW_CANNY:
-            filter->show_canny = g_value_get_boolean(value);
+        case PROP_SHOW_BORDERS:
+            filter->show_borders = g_value_get_boolean(value);
             break;
         case PROP_SAMPLE_SIZE:
             filter->sample_size = g_value_get_uint(value);
@@ -364,8 +364,8 @@ gst_tracker_get_property(GObject * object, guint prop_id,
         case PROP_SHOW_FEATURES_BOX:
             g_value_set_boolean(value, filter->show_features_box);
             break;
-        case PROP_SHOW_CANNY:
-            g_value_set_boolean(value, filter->show_canny);
+        case PROP_SHOW_BORDERS:
+            g_value_set_boolean(value, filter->show_borders);
             break;
         case PROP_SAMPLE_SIZE:
             g_value_set_uint(value, filter->sample_size);
@@ -494,24 +494,27 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
                 cvFindCornerSubPix(filter->grey, filter->points[1], filter->count, cvSize(win_size, win_size),
                                    cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03));
 
+                // Displacement coordinates according ROI
                 for(i = 0; i < filter->count; i++){
                     filter->points[1][i].x += rectRoi.x;
                     filter->points[1][i].y += rectRoi.y;
                 }
 
-                // Rect draw (ROI)
-                cvRectangle(filter->image,
-                    cvPoint(rectRoi.x, rectRoi.y),
-                    cvPoint(rectRoi.x+rectRoi.width, rectRoi.y+rectRoi.height),
-                    CV_RGB(255, 0, 255), 3, 0, 0 );
 
                 cvResetImageROI( filter->grey );
-                printf(" reload...\n");
+
+                if (filter->verbose){
+                    cvRectangle(filter->image,
+                        cvPoint(rectRoi.x, rectRoi.y),
+                        cvPoint(rectRoi.x+rectRoi.width, rectRoi.y+rectRoi.height),
+                        CV_RGB(255, 0, 255), 3, 0, 0 );
+                    printf(" reload...\n");
+                }
             }
 
             cvReleaseImage(&eig);
             cvReleaseImage(&temp);
-        }//if brackround
+        }
     } else {
         int i, k;
 
@@ -520,31 +523,6 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
                                3, filter->status, 0, cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03),
                                filter->flags);
         filter->flags |= CV_LKFLOW_PYR_A_READY;
-
-
-
-
-
-        if (filter->show_canny){
-            CvPoint min, max;
-            min.x = filter->points[1][0].x;
-            min.y = filter->points[1][0].y;
-            max.x = filter->points[1][0].x;
-            max.y = filter->points[1][0].y;
-            for(i = 1; i < filter->count; ++i){
-                if(filter->points[1][i].x < 0) continue;
-                if(filter->points[1][i].y < 0) continue;
-                if(filter->points[1][i].x > filter->image->width) continue;
-                if(filter->points[1][i].y > filter->image->height) continue;
-                if(min.x > filter->points[1][i].x) min.x = filter->points[1][i].x;
-                if(min.y > filter->points[1][i].y) min.y = filter->points[1][i].y;
-                if(max.x < filter->points[1][i].x) max.x = filter->points[1][i].x;
-                if(max.y < filter->points[1][i].y) max.y = filter->points[1][i].y;
-            }
-            canny(filter->image, cvRect(min.x, min.y, max.x-min.x, max.y-min.y), 30, 4);
-        }
-
-
 
         double measurement_x, measurement_y;
         centroid(filter->points[1], filter->count, &measurement_x, &measurement_y);
@@ -572,8 +550,9 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
                 cvCircle(filter->image, cvPointFrom32f(filter->points[1][i]), 3, CV_RGB(255, 255, 0), -1, 8, 0);
         }
 
-        // Draw feature box if required
-        if (filter->show_features_box && filter->count){
+        // Create features box
+        CvRect featuresBox = cvRect(0,0,0,0);
+        if(filter->count){
             CvPoint min, max;
             min.x = filter->points[1][0].x;
             min.y = filter->points[1][0].y;
@@ -585,7 +564,21 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
                 if(max.x < filter->points[1][i].x) max.x = filter->points[1][i].x;
                 if(max.y < filter->points[1][i].y) max.y = filter->points[1][i].y;
             }
-            cvRectangle(filter->image, min, max, CV_RGB(0, 255, 255), 1, 0, 0 );
+            featuresBox = cvRect(min.x, min.y, max.x-min.x, max.y-min.y);
+        }
+
+        // Draw feature box if required
+        if (filter->show_features_box && (featuresBox.height+featuresBox.width) != 0)
+            cvRectangle(filter->image, 
+                    cvPoint(featuresBox.x, featuresBox.y),
+                    cvPoint(featuresBox.x+featuresBox.width, featuresBox.y+featuresBox.height),
+                    CV_RGB(0, 255, 255), 1, 0, 0 );
+
+        // Show border if required
+        if (filter->show_borders && (featuresBox.height+featuresBox.width) != 0){
+            cvSetImageROI(filter->grey, featuresBox);
+            showBorder(filter->grey, filter->image, cvScalarAll(255), 30, 3, 1);
+            cvResetImageROI(filter->grey);
         }
 
         filter->count = k;
