@@ -116,7 +116,7 @@ gst_facemetrix_finalize (GObject * obj)
         cvReleaseImage (&filter->cvImage);
         cvReleaseImage (&filter->cvGray);
     }
-    if (filter->sgl) {
+    if (filter->sgl != NULL) {
         sgl_client_close(filter->sgl);
         g_object_unref(filter->sgl);
         filter->sgl = NULL;
@@ -195,6 +195,7 @@ gst_facemetrix_init(GstFacemetrix *filter, GstFacemetrixClass *gclass)
     filter->display = TRUE;
     filter->sglhost = DEFAULT_SGL_HOST;
     filter->sglport = DEFAULT_SGL_PORT;
+    filter->sgl     = NULL;
 
     gst_facemetrix_load_profile(filter);
 }
@@ -269,9 +270,14 @@ gst_facemetrix_set_caps (GstPad * pad, GstCaps * caps)
     filter->cvStorage = cvCreateMemStorage(0);
 
     // initialize sgl connection
-    if (sgl_client_open(filter->sgl, filter->sglhost, filter->sglport) == FALSE) {
-        GST_WARNING("unable to connect to sgl server (%s:%u)", filter->sglhost, filter->sglport);
-        filter->sgl = NULL;
+    if ((filter->sgl = g_object_new(SGL_CLIENT_TYPE, NULL)) == NULL) {
+        GST_WARNING("unable to create sgl client instance");
+    } else {
+        if (sgl_client_open(filter->sgl, filter->sglhost, filter->sglport) == FALSE) {
+            GST_WARNING("unable to connect to sgl server (%s:%u)", filter->sglhost, filter->sglport);
+            g_object_unref(filter->sgl);
+            filter->sgl = NULL;
+        }
     }
 
     otherpad = (pad == filter->srcpad) ? filter->sinkpad : filter->srcpad;
