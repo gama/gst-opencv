@@ -4,6 +4,8 @@ dnl versions of gstreamer and plugins-base
 GST_MAJORMINOR=0.10
 GST_REQUIRED=0.10.0
 GSTPB_REQUIRED=0.10.0
+GNET_MAJORMINOR=2.0
+GNET_REQUIRED=2.0.8
 
 dnl fill in your package name and version here
 dnl the fourth (nano) number should be 0 for a release, 1 for CVS,
@@ -128,6 +130,12 @@ dnl make _CFLAGS and _LIBS available
 AC_SUBST(GSTCTRL_CFLAGS)
 AC_SUBST(GSTCTRL_LIBS)
 
+
+dnl check for GNet library
+PKG_CHECK_MODULES(GNET, gnet-$GNET_MAJORMINOR >= $GNET_REQUIRED)
+AC_SUBST(GNET_CFLAGS)
+AC_SUBST(GNET_LIBS)
+
 dnl set the plugindir where plugins should be installed
 if test "x${prefix}" = "x$HOME"; then
   plugindir="$HOME/.gstreamer-$GST_MAJORMINOR/plugins"
@@ -147,9 +155,9 @@ AC_OUTPUT([
     src/edgedetect/Makefile
     src/faceblur/Makefile
     src/facedetect/Makefile
+    src/facemetrix/Makefile
     src/lkopticalflow/Makefile
     src/pyramidsegment/Makefile
     src/templatematch/Makefile
     src/tracker/Makefile
 ])
-dnl src/kalmanfilter/Makefile

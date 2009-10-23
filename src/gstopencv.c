@@ -44,6 +44,9 @@ plugin_init (GstPlugin * plugin)
   if (!gst_facedetect_plugin_init (plugin))
     return FALSE;
 
+  if (!gst_facemetrix_plugin_init (plugin))
+    return FALSE;
+
   if (!gst_lkopticalflow_plugin_init (plugin))
     return FALSE;
 

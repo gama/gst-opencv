@@ -1,6 +1,7 @@
 SUBDIRS = edgedetect        \
           faceblur          \
           facedetect        \
+          facemetrix        \
           lkopticalflow     \
           pyramidsegment    \
           templatematch     \
@@ -19,6 +20,7 @@ libgstopencv_la_CFLAGS = $(GST_CFLAGS) $(OPENCV_CFLAGS)     \
                          -I${top_srcdir}/src/edgedetect     \
                          -I${top_srcdir}/src/faceblur       \
                          -I${top_srcdir}/src/facedetect     \
+                         -I${top_srcdir}/src/facemetrix     \
                          -I${top_srcdir}/src/lkopticalflow  \
                          -I${top_srcdir}/src/pyramidsegment \
                          -I${top_srcdir}/src/templatematch  \
@@ -29,6 +31,7 @@ libgstopencv_la_LIBADD = $(GST_LIBS) $(OPENCV_LIBS)                             
                          $(top_builddir)/src/edgedetect/libgstedgedetect.la         \
                          $(top_builddir)/src/faceblur/libgstfaceblur.la             \
                          $(top_builddir)/src/facedetect/libgstfacedetect.la         \
+                         $(top_builddir)/src/facemetrix/libgstfacemetrix.la         \
                          $(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la   \
                          $(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la \
                          $(top_builddir)/src/templatematch/libgsttemplatematch.la   \
@@ -38,6 +41,8 @@ libgstopencv_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 
 libgstopencv_la_DEPENDENCIES = $(top_builddir)/src/edgedetect/libgstedgedetect.la           \
                                $(top_builddir)/src/faceblur/libgstfaceblur.la               \
+                               $(top_builddir)/src/facedetect/libgstfacedetect.la           \
+                               $(top_builddir)/src/facemetrix/libgstfacemetrix.la           \
                                $(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la     \
                                $(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la   \
                                $(top_builddir)/src/templatematch/libgsttemplatematch.la     \
