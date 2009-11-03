@@ -5,6 +5,9 @@
 
 G_BEGIN_DECLS
 
+#define SGL_UNKNOWN_FACE_ID     "__UNKNOWN__"
+#define SGL_NO_FACE_DETECTED    "__NOFACE__"
+
 #define SGL_CLIENT_TYPE         (sgl_client_get_type ())
 #define SGL_CLIENT(o)           (G_TYPE_CHECK_INSTANCE_CAST ((o), SGL_CLIENT_TYPE, SglClient))
 #define SGL_CLIENT_CLASS(k)     (G_TYPE_CHECK_CLASS_CAST((k), SGL_CLIENT_TYPE, SglClientClass))
@@ -29,18 +32,25 @@ struct _SglClientClass
     GObjectClass parent_class;
 };
 
-GType    sgl_client_get_type(void);
+GType    sgl_client_get_type   (void);
 
-gboolean sgl_client_open      (SglClient   *client,
-                               const gchar *hostname,
-                               const guint  port);
+gboolean sgl_client_open       (SglClient      *client,
+                                const gchar    *hostname,
+                                const guint     port);
 
-void     sgl_client_close     (SglClient   *client);
+void     sgl_client_close      (SglClient      *client);
 
-gchar*   sgl_client_recognize (SglClient   *client,
-                               const gchar *data,
-                               const guint  length);
+gchar**  sgl_client_list_users (SglClient      *client);
 
+gchar*   sgl_client_recognize  (SglClient      *client,
+                                const gboolean  detect,
+                                const gchar    *data,
+                                const guint     length);
+
+gboolean sgl_client_store      (SglClient      *client,
+                                const gchar    *id,
+                                const gchar    *data,
+                                const guint     length);
 G_END_DECLS
 
 #endif

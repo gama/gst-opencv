@@ -28,13 +28,22 @@
 #define SGL_PASSWORD                 "vetta"
 
 #define SGL_OPEN_SESSION_REQUEST     "#open_session %s %s#"
-#define SGL_EXECUTE_REQUEST          "#execute facemetrix#"
-#define SGL_RECOGNIZE_REQUEST        "#recognize reqid %d userid gama timestamp %s store N photo %s#"
 #define SGL_OPEN_SESSION_RESPONSE_OK "#ok open_session#"
+
+#define SGL_EXECUTE_REQUEST          "#execute facemetrix#"
 #define SGL_EXECUTE_RESPONSE_OK      "#ok execute face_metrix#"
+
+#define SGL_USER_LIST_REQUEST        "#list_users#"
+#define SGL_USER_LIST_RESPONSE       "#list_users_response"
+
+#define SGL_RECOGNIZE_REQUEST        "#recognize reqid %d userid nobody timestamp %s detect %s photo %s#"
 #define SGL_RECOGNIZE_RESPONSE_OK    "#recognize_response reqid %d userid "
 
+#define SGL_STORE_REQUEST            "#store reqid %d userid %s timestamp %s photo %s#"
+#define SGL_STORE_RESPONSE_OK        "#ok store reqid %d#"
+
 #define SGL_TIMESTAMP_FORMAT         "%H:%M:%S-%d/%m/%Y"
+#define SGL_TIMESTAMP_EXAMPLE        "HH:MM:SS-DD/MM/YYYY"
 
 // sgl client private members
 #define SGL_CLIENT_GET_PRIVATE(object) (G_TYPE_INSTANCE_GET_PRIVATE((object), SGL_CLIENT_TYPE, SglClientPrivate))
@@ -47,10 +56,11 @@ static gpointer sgl_client_parent_class = NULL;
 
 // static function declarations
 static GIOError gnet_read_sgl_command_dup (GIOChannel* channel, gchar** bufferp, gsize* bytes_readp);
-static void sgl_client_class_init         (gpointer klass, gpointer data);
-static void sgl_client_init               (GTypeInstance *instance, gpointer data);
-static void sgl_client_dispose            (GObject *instance);
-static void sgl_client_finalize           (GObject *instance);
+static gchar*   build_timestamp           (void);
+static void     sgl_client_class_init     (gpointer klass, gpointer data);
+static void     sgl_client_init           (GTypeInstance *instance, gpointer data);
+static void     sgl_client_dispose        (GObject *instance);
+static void     sgl_client_finalize       (GObject *instance);
 
 // --------------------------------------------------------------------
 
@@ -136,18 +146,55 @@ sgl_client_close(SglClient *client)
     priv->iochannel = NULL;
 }
 
-gchar*
-sgl_client_recognize(SglClient *client, const gchar* data, const guint length)
+gchar**
+sgl_client_list_users (SglClient *client)
 {
-    gchar *request, *response, *expected_recognize_response;
-    gchar *base64_data, *id, *id_start, *id_end;
+    gchar *response, **user_list;
     gsize request_length, response_length, bytes_written;
     GIOError error = G_IO_ERROR_NONE;
     SglClientPrivate *priv = SGL_CLIENT_GET_PRIVATE(client);
 
-    time_t t;
-    struct tm *tt;
-    gchar  timestamp[128];
+    // sanity checks
+    g_return_val_if_fail(client          != NULL, FALSE);
+    g_return_val_if_fail(priv->socket    != NULL, FALSE);
+    g_return_val_if_fail(priv->iochannel != NULL, FALSE);
+
+    // build open_session request string and send it
+    request_length = strlen(SGL_USER_LIST_REQUEST);
+    error = gnet_io_channel_writen(priv->iochannel, SGL_USER_LIST_REQUEST, request_length, &bytes_written);
+    if ((error != G_IO_ERROR_NONE) || (request_length != bytes_written)) {
+        g_warning("unable to send 'list_users' request: %d (%s)", error, g_strerror(errno));
+        return NULL;
+    }
+
+    // read and parse open_session response
+    error = gnet_read_sgl_command_dup(priv->iochannel, &response, &response_length);
+    if (error != G_IO_ERROR_NONE) {
+        g_warning("unable to get 'list_users' response: %d (%s)", error, g_strerror(errno));
+        g_free(response);
+        return NULL;
+    }
+    if ((g_str_has_prefix(response, SGL_USER_LIST_RESPONSE) == FALSE) ||
+        (g_str_has_suffix(response, "#") == FALSE)) {
+        g_warning("unable to parse 'list_users' response: (%s)", response);
+        g_free(response);
+        return NULL;
+    }
+
+    response[response_length - 1] = '\0';
+    user_list = g_strsplit(response + strlen(SGL_USER_LIST_RESPONSE) + 1, " ", -1);
+    g_free(response);
+    return user_list;
+}
+
+gchar*
+sgl_client_recognize(SglClient *client, const gboolean detect, const gchar* data, const guint length)
+{
+    gchar *request, *response, *expected_recognize_response;
+    gchar *base64_data, *timestamp, *id, *id_start, *id_end;
+    gsize request_length, response_length, bytes_written;
+    GIOError error = G_IO_ERROR_NONE;
+    SglClientPrivate *priv = SGL_CLIENT_GET_PRIVATE(client);
 
     // sanity checks
     g_return_val_if_fail(client          != NULL, FALSE);
@@ -155,21 +202,15 @@ sgl_client_recognize(SglClient *client, const gchar* data, const guint length)
     g_return_val_if_fail(priv->iochannel != NULL, FALSE);
     g_return_val_if_fail(data            != NULL, FALSE);
 
-    // print timestamp
-    t = time(NULL);
-    tt = localtime(&t);
-    if (strftime(timestamp, sizeof(timestamp), SGL_TIMESTAMP_FORMAT, tt) == 0) {
-        g_warning("unable to get timestamp");
-        return NULL;
-    }
-
     // convert data to base64 format
     base64_data = g_base64_encode((const guchar*) data, length);
 
     // build request string and send it
-    request = g_strdup_printf(SGL_RECOGNIZE_REQUEST, ++priv->reqid, timestamp, base64_data);
+    timestamp = build_timestamp();
+    request = g_strdup_printf(SGL_RECOGNIZE_REQUEST, ++priv->reqid, timestamp, detect ? "Y" : "N", base64_data);
     request_length = strlen(request);
     g_free(base64_data);
+    g_free(timestamp);
     error = gnet_io_channel_writen(priv->iochannel, request, request_length, &bytes_written);
     if ((error != G_IO_ERROR_NONE) || (request_length != bytes_written)) {
         g_warning("unable to send 'recognize' request: %d (%s)", error, g_strerror(errno));
@@ -202,6 +243,57 @@ sgl_client_recognize(SglClient *client, const gchar* data, const guint length)
     g_free(response);
 
     return id;
+}
+
+gboolean
+sgl_client_store(SglClient *client, const gchar *userid, const gchar* data, const guint length)
+{
+    gchar *request, *response, *expected_recognize_response, *base64_data, *timestamp;
+    gsize request_length, response_length, bytes_written;
+    GIOError error = G_IO_ERROR_NONE;
+    SglClientPrivate *priv = SGL_CLIENT_GET_PRIVATE(client);
+
+    // sanity checks
+    g_return_val_if_fail(client          != NULL, FALSE);
+    g_return_val_if_fail(priv->socket    != NULL, FALSE);
+    g_return_val_if_fail(priv->iochannel != NULL, FALSE);
+    g_return_val_if_fail(data            != NULL, FALSE);
+
+    // convert data to base64 format
+    base64_data = g_base64_encode((const guchar*) data, length);
+
+    // build request string and send it
+    timestamp = build_timestamp();
+    request = g_strdup_printf(SGL_STORE_REQUEST, ++priv->reqid, userid, timestamp, base64_data);
+    request_length = strlen(request);
+    g_free(base64_data);
+    g_free(timestamp);
+    error = gnet_io_channel_writen(priv->iochannel, request, request_length, &bytes_written);
+    if ((error != G_IO_ERROR_NONE) || (request_length != bytes_written)) {
+        g_warning("unable to send 'store' request: %d (%s)", error, g_strerror(errno));
+        g_free(request);
+        return FALSE;
+    }
+    g_free(request);
+
+    // read and parse the response
+    error = gnet_read_sgl_command_dup(priv->iochannel, &response, &response_length);
+    if (error != G_IO_ERROR_NONE) {
+        g_warning("unable to get 'store' response: %d (%s)", error, g_strerror(errno));
+        return FALSE;
+    }
+    expected_recognize_response = g_strdup_printf(SGL_STORE_RESPONSE_OK, priv->reqid);
+    if ((g_str_has_prefix(response, expected_recognize_response) == FALSE) ||
+        (g_str_has_suffix(response, "#") == FALSE)) {
+        g_warning("unable to parse 'store' response: (%s)", response);
+        g_free(expected_recognize_response);
+        g_free(response);
+        return FALSE;
+    }
+    g_free(expected_recognize_response);
+    g_free(response);
+
+    return TRUE;
 }
 
 // adapted from gnet_iochannel_readline_strdup
@@ -251,6 +343,27 @@ gnet_read_sgl_command_dup(GIOChannel* channel, gchar** bufferp, gsize* bytes_rea
     *bufferp = buf;
     *bytes_readp = n;
     return error;
+}
+
+static
+gchar* build_timestamp()
+{
+    time_t t;
+    struct tm *tt;
+    gchar *timestamp;  
+    guint timestamp_length;
+
+    // print timestamp
+    t = time(NULL);
+    tt = localtime(&t);
+    timestamp_length = strlen(SGL_TIMESTAMP_EXAMPLE) + 1;
+
+    timestamp = g_new(char, timestamp_length);
+    if (strftime(timestamp, timestamp_length, SGL_TIMESTAMP_FORMAT, tt) == 0) {
+        g_warning("unable to get timestamp");
+        return g_strdup("");
+    }
+    return timestamp;
 }
 
 // -- gtype boilerplate --

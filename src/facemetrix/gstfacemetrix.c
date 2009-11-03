@@ -327,7 +327,7 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
                 }
                 size_t size = jpegface->rows * jpegface->cols * jpegface->step;
 
-                if ((id = sgl_client_recognize(filter->sgl, (gchar*) jpegface->data.ptr, size)) == NULL) {
+                if ((id = sgl_client_recognize(filter->sgl, FALSE, (gchar*) jpegface->data.ptr, size)) == NULL) {
                     GST_WARNING("[sgl] unable to get user id");
                 }
 
