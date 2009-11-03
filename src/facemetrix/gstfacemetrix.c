@@ -302,8 +302,13 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
     cvClearMemStorage(filter->cvStorage);
 
     if (filter->cvCascade) {
-        faces = cvHaarDetectObjects(filter->cvGray, filter->cvCascade,
-                                    filter->cvStorage, 1.1, 2, 0, cvSize (30, 30));
+        faces = cvHaarDetectObjects(filter->cvGray,
+                                    filter->cvCascade,
+                                    filter->cvStorage,
+                                    1.1,
+                                    2,
+                                    CV_HAAR_FIND_BIGGEST_OBJECT|CV_HAAR_DO_ROUGH_SEARCH|CV_HAAR_SCALE_IMAGE,
+                                    cvSize(20, 20));
 
         for (i = 0; i < (faces ? faces->total : 0); i++) {
             // FIXME: select the largest face instead of processing just the first one
