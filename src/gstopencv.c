@@ -26,6 +26,7 @@
 #include "gstedgedetect.h"
 #include "gstfaceblur.h"
 #include "gstfacedetect.h"
+#include "gstfacemetrix.h"
 #include "gstlkopticalflow.h"
 #include "gstpyramidsegment.h"
 #include "gsttemplatematch.h"
