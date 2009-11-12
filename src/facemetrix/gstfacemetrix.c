@@ -311,61 +311,62 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
                                     cvSize(20, 20));
 
         for (i = 0; i < (faces ? faces->total : 0); i++) {
-            // FIXME: select the largest face instead of processing just the first one
+            CvMat   face;
+            CvRect *rect;
             gchar *id = "__NOID__";
-            CvRect *r = (CvRect *) cvGetSeqElem(faces, i);
+
+            rect = (CvRect*) cvGetSeqElem(faces, i);
+
+            cvGetSubRect(filter->cvImage, &face, *rect);
+
+            if (!CV_IS_MAT(&face)) {
+                GST_WARNING("CvGetSubRect: unable to grab face sub-image");
+                break;
+            }
 
             if (filter->sgl != NULL) {
-                CvMat face;
+                CvMat *jpegface = cvEncodeImage(".jpg", &face, NULL);
 
-                // FIXME: I don't think the code below works; replace with something more appropriate
-                cvGetSubRect(filter->cvImage, &face, *r);
-                if (CV_IS_MAT(&face)) {
-                    GST_WARNING("CvGetSubRect: unable to grab face sub-image");
-                    break;
-                }
-                CvMat *jpegface = cvEncodeImage("jpg", &face, NULL);
-                if (CV_IS_MAT(jpegface)) {
+                if (!CV_IS_MAT(jpegface)) {
                     GST_WARNING("CvGetSubRect: unable to convert face sub-image to jpeg format");
                     cvDecRefData(&face);
                     break;
                 }
-                size_t size = jpegface->rows * jpegface->cols * jpegface->step;
-
-                if ((id = sgl_client_recognize(filter->sgl, FALSE, (gchar*) jpegface->data.ptr, size)) == NULL) {
+                if ((id = sgl_client_recognize(filter->sgl, FALSE, (gchar*) jpegface->data.ptr, jpegface->rows * jpegface->step)) == NULL) {
                     GST_WARNING("[sgl] unable to get user id");
                 }
 
                 cvReleaseMat(&jpegface);
-                cvDecRefData(&face);
             }
 
-            GstStructure *s = gst_structure_new("face",
-                                                "x", G_TYPE_UINT, r->x,
-                                                "y", G_TYPE_UINT, r->y,
-                                                "width", G_TYPE_UINT, r->width,
-                                                "height", G_TYPE_UINT, r->height,
-                                                "id", G_TYPE_STRING, id, NULL);
+            cvDecRefData(&face);
 
-            GstMessage *m = gst_message_new_element(GST_OBJECT (filter), s);
-            gst_element_post_message(GST_ELEMENT (filter), m);
+            //GstStructure *s = gst_structure_new("face",
+            //                                    "x", G_TYPE_UINT, r->x,
+            //                                    "y", G_TYPE_UINT, r->y,
+            //                                    "width", G_TYPE_UINT, r->width,
+            //                                    "height", G_TYPE_UINT, r->height,
+            //                                    "id", G_TYPE_STRING, id, NULL);
 
-            if (filter->display) {
-                CvPoint center, center_bottom;
-                CvFont font;
-                int radius;
+            //GstMessage *m = gst_message_new_element(GST_OBJECT (filter), s);
+            //gst_element_post_message(GST_ELEMENT (filter), m);
 
-                center.x = cvRound((r->x + r->width * 0.5));
-                center.y = cvRound((r->y + r->height * 0.5));
-                radius = cvRound((r->width + r->height) * 0.25);
-                cvCircle(filter->cvImage, center, radius, CV_RGB (255, 32, 32), 3, 8, 0);
+            //if (filter->display) {
+            //    CvPoint center, center_bottom;
+            //    CvFont font;
+            //    int radius;
 
-                // FIXME: fix the code below
-                center_bottom.x = center.x;
-                center_bottom.y = center.y > 10 ? center.y - 10 : 0;
-                cvInitFont(&font, CV_FONT_HERSHEY_SIMPLEX, 1.0f, 1.0f, 0.0f, 1, 8);
-                cvPutText(filter->cvImage, id, center_bottom, &font , CV_RGB(255, 32, 32));
-            }
+            //    center.x = cvRound((r->x + r->width * 0.5));
+            //    center.y = cvRound((r->y + r->height * 0.5));
+            //    radius = cvRound((r->width + r->height) * 0.25);
+            //    cvCircle(filter->cvImage, center, radius, CV_RGB (255, 32, 32), 3, 8, 0);
+
+            //    // FIXME: fix the code below
+            //    center_bottom.x = center.x;
+            //    center_bottom.y = center.y > 10 ? center.y - 10 : 0;
+            //    cvInitFont(&font, CV_FONT_HERSHEY_SIMPLEX, 1.0f, 1.0f, 0.0f, 1, 8);
+            //    cvPutText(filter->cvImage, id, center_bottom, &font , CV_RGB(255, 32, 32));
+            //}
         }
     }
 
