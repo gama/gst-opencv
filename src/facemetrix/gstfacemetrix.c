@@ -58,6 +58,7 @@
 #include <config.h>
 #endif
 
+#include <unistd.h>
 #include <gst/gst.h>
 #include <highgui.h>
 
@@ -82,7 +83,8 @@ enum
     PROP_DISPLAY,
     PROP_PROFILE,
     PROP_SGL_HOST,
-    PROP_SGL_PORT
+    PROP_SGL_PORT,
+    PROP_DEBUG
 };
 
 // the capabilities of the inputs and outputs.
@@ -171,6 +173,10 @@ gst_facemetrix_class_init(GstFacemetrixClass *klass)
                                     g_param_spec_uint("sgl-port", "SGL server port",
                                                       "TCP port used by the SGL server",
                                                       0, USHRT_MAX, DEFAULT_SGL_PORT, G_PARAM_READWRITE));
+    g_object_class_install_property(gobject_class, PROP_DEBUG,
+                                    g_param_spec_boolean("debug", "Debug",
+                                                         "Save detected faces images to /tmp and prints debug-related info to stdout",
+                                                         FALSE, G_PARAM_READWRITE));
 }
 
 //initialize the new element
@@ -191,11 +197,13 @@ gst_facemetrix_init(GstFacemetrix *filter, GstFacemetrixClass *gclass)
     gst_element_add_pad(GST_ELEMENT (filter), filter->sinkpad);
     gst_element_add_pad(GST_ELEMENT (filter), filter->srcpad);
 
-    filter->profile = DEFAULT_PROFILE;
-    filter->display = TRUE;
-    filter->sglhost = DEFAULT_SGL_HOST;
-    filter->sglport = DEFAULT_SGL_PORT;
-    filter->sgl     = NULL;
+    filter->profile   = DEFAULT_PROFILE;
+    filter->display   = TRUE;
+    filter->sglhost   = DEFAULT_SGL_HOST;
+    filter->sglport   = DEFAULT_SGL_PORT;
+    filter->sgl       = NULL;
+    filter->debug     = FALSE;
+    filter->image_idx = 0;
 
     gst_facemetrix_load_profile(filter);
 }
@@ -218,6 +226,9 @@ gst_facemetrix_set_property(GObject *object, guint prop_id, const GValue *value,
             break;
         case PROP_SGL_PORT:
             filter->sglport = g_value_get_uint(value);
+            break;
+        case PROP_DEBUG:
+            filter->debug = g_value_get_boolean(value);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -242,6 +253,9 @@ gst_facemetrix_get_property (GObject *object, guint prop_id, GValue *value, GPar
             break;
         case PROP_SGL_PORT:
             g_value_set_uint(value, filter->sglport);
+            break;
+        case PROP_DEBUG:
+            g_value_set_boolean(value, filter->debug);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -313,6 +327,7 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
         for (i = 0; i < (faces ? faces->total : 0); i++) {
             CvMat   face;
             CvRect *rect;
+            char   *filename;
             gchar *id = "__NOID__";
 
             rect = (CvRect*) cvGetSeqElem(faces, i);
@@ -322,6 +337,13 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
             if (!CV_IS_MAT(&face)) {
                 GST_WARNING("CvGetSubRect: unable to grab face sub-image");
                 break;
+            }
+
+            if (filter->debug) {
+                filename = g_strdup_printf("/tmp/facemetrix_image_%05d_%04d.jpg", getpid(), ++filter->image_idx);
+                cvSaveImage(filename, &face, 0);
+                g_print(">> face detected (saved as %s)\n", filename);
+                g_free(filename);
             }
 
             if (filter->sgl != NULL) {
@@ -334,6 +356,8 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
                 }
                 if ((id = sgl_client_recognize(filter->sgl, FALSE, (gchar*) jpegface->data.ptr, jpegface->rows * jpegface->step)) == NULL) {
                     GST_WARNING("[sgl] unable to get user id");
+                } else if (filter->debug) {
+                    g_print("[sgl] id: %s\n", id);
                 }
 
                 cvReleaseMat(&jpegface);

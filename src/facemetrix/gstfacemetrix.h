@@ -68,6 +68,8 @@ struct _GstFacemetrix
 
     GstPad                  *sinkpad;
     GstPad                  *srcpad;
+
+    gboolean                 debug;
     gboolean                 display;
     gchar                   *profile;
 
@@ -79,6 +81,7 @@ struct _GstFacemetrix
     SglClient               *sgl;
     gchar                   *sglhost;
     guint                    sglport;
+    guint                    image_idx;
 };
 
 struct _GstFacemetrixClass
