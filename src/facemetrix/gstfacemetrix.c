@@ -61,6 +61,7 @@
 #include <config.h>
 #endif
 
+#include <unistd.h>
 #include <gst/gst.h>
 #include <highgui.h>
 #include <glib/gprintf.h>
@@ -493,7 +494,7 @@ gst_facemetrix_set_caps (GstPad * pad, GstCaps * caps)
 static GstFlowReturn
 gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
 {
-    gchar *id;
+    gchar *id = "__UNKNOWN__";
     GstFacemetrix *filter;
 
     filter = GST_FACEMETRIX (GST_OBJECT_PARENT (pad));
@@ -503,9 +504,6 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
     cvClearMemStorage(filter->cvStorage);
 
     // Tracker code
-    IplImage *swap_temp;
-    CvPoint2D32f *swap_points;
-    float avg_x = 0.0;
     filter->image->imageData = (char *) GST_BUFFER_DATA(buf);
     cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
     CvRect particlesBoundary;
