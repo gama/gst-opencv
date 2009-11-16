@@ -190,15 +190,15 @@ gst_tracker_class_init(GstTrackerClass * klass)
 
     g_object_class_install_property(gobject_class, PROP_VERBOSE,
                                     g_param_spec_boolean("verbose", "Verbose", "Sets whether the movement direction should be printed to the standard output.",
-                                                         TRUE, G_PARAM_READWRITE));
+                                                         FALSE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_SHOW_PARTICLES,
                                     g_param_spec_boolean("show-particles", "Show particles", "Sets whether particles location should be printed to the video.",
-                                                         TRUE, G_PARAM_READWRITE));
+                                                         FALSE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_SHOW_FEATURES,
                                     g_param_spec_boolean("show-features", "Show features", "Sets whether features location should be printed to the video.",
-                                                         TRUE, G_PARAM_READWRITE));
+                                                         FALSE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_SHOW_FEATURES_BOX,
                                     g_param_spec_boolean("show-features-box", "Show features box", "Sets whether features box should be printed to the video.",
@@ -206,7 +206,7 @@ gst_tracker_class_init(GstTrackerClass * klass)
 
     g_object_class_install_property(gobject_class, PROP_SHOW_BORDERS,
                                     g_param_spec_boolean("show-borders", "Show borders in features box", "Sets whether borders in features box should be printed to the video.",
-                                                         FALSE, G_PARAM_READWRITE));
+                                                         TRUE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_MAX_POINTS,
                                     g_param_spec_uint("max-points", "Max points", "Maximum number of feature points.",
@@ -257,11 +257,11 @@ gst_tracker_init(GstTracker * filter, GstTrackerClass * gclass)
     gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
 
     // set default properties
-    filter->verbose            = TRUE;
-    filter->show_particles     = TRUE;
-    filter->show_features      = TRUE;
+    filter->verbose            = FALSE;
+    filter->show_particles     = FALSE;
+    filter->show_features      = FALSE;
     filter->show_features_box  = FALSE;
-    filter->show_borders         = FALSE;
+    filter->show_borders       = TRUE;
     filter->max_points         = DEFAULT_MAX_POINTS;
     filter->min_points         = DEFAULT_MIN_POINTS;
     filter->win_size           = DEFAULT_WIN_SIZE;
