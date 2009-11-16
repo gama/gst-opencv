@@ -43,6 +43,9 @@
  * Boston, MA 02111-1307, USA.
  */
 
+#include <cxtypes.h>
+
+
 /**
  * SECTION:element-facemetrix
  *
@@ -58,11 +61,45 @@
 #include <config.h>
 #endif
 
-#include <unistd.h>
 #include <gst/gst.h>
 #include <highgui.h>
+#include <glib/gprintf.h>
 
 #include "gstfacemetrix.h"
+#include "draw.h"
+
+// transition matrix F describes model parameters at and k and k+1
+static const float F[] = { 1, 1, 0, 1 };
+
+#define DEFAULT_MAX_POINTS          500
+#define DEFAULT_MIN_POINTS          20
+#define DEFAULT_WIN_SIZE            10
+#define DEFAULT_MOVEMENT_THRESHOLD  2.0
+
+#define DEFAULT_STATE_DIM           4
+#define DEFAULT_MEASUREMENT_DIM     4
+#define DEFAULT_SAMPLE_SIZE         50
+#define DEFAULT_MAX_SAMPLE_SIZE     10*DEFAULT_SAMPLE_SIZE
+
+enum {
+    PROP_0,
+    PROP_VERBOSE,
+    PROP_MAX_POINTS,
+    PROP_MIN_POINTS,
+    PROP_WIN_SIZE,
+    PROP_MOVEMENT_THRESHOLD,
+    PROP_SHOW_PARTICLES,
+    PROP_SHOW_FEATURES,
+    PROP_SHOW_FEATURES_BOX,
+    PROP_SHOW_BORDERS,
+    PROP_SAMPLE_SIZE,
+    PROP_FRAMES_LEARN_BG,
+    PROP_DISPLAY,
+    PROP_PROFILE,
+    PROP_SGL_HOST,
+    PROP_SGL_PORT,
+    PROP_DEBUG
+};
 
 GST_DEBUG_CATEGORY_STATIC (gst_facemetrix_debug);
 #define GST_CAT_DEFAULT gst_facemetrix_debug
@@ -71,20 +108,14 @@ GST_DEBUG_CATEGORY_STATIC (gst_facemetrix_debug);
 #define DEFAULT_SGL_HOST "localhost"
 #define DEFAULT_SGL_PORT 1500
 
+#define MAX_NFACES 10
+#define MIN_FACE_NEIGHBORS 5    //2~5
+#define MIN_FACEBOX_SIDE 20
+
 // Filter signals and args
 enum
 {
     LAST_SIGNAL
-};
-
-enum
-{
-    PROP_0,
-    PROP_DISPLAY,
-    PROP_PROFILE,
-    PROP_SGL_HOST,
-    PROP_SGL_PORT,
-    PROP_DEBUG
 };
 
 // the capabilities of the inputs and outputs.
@@ -108,6 +139,7 @@ static gboolean      gst_facemetrix_set_caps     (GstPad * pad, GstCaps * caps);
 static GstFlowReturn gst_facemetrix_chain        (GstPad * pad, GstBuffer * buf);
 static void          gst_facemetrix_load_profile (GstFacemetrix * filter);
 
+
 // clean up
 static void
 gst_facemetrix_finalize (GObject * obj)
@@ -117,6 +149,7 @@ gst_facemetrix_finalize (GObject * obj)
     if (filter->cvImage) {
         cvReleaseImage (&filter->cvImage);
         cvReleaseImage (&filter->cvGray);
+	    cvReleaseImage (&filter->cvMotion);
     }
     if (filter->sgl != NULL) {
         sgl_client_close(filter->sgl);
@@ -124,7 +157,22 @@ gst_facemetrix_finalize (GObject * obj)
         filter->sgl = NULL;
     }
 
-    G_OBJECT_CLASS (parent_class)->finalize(obj);
+    // Tracker code
+    if (filter->image)        cvReleaseImage(&filter->image);
+    if (filter->grey)         cvReleaseImage(&filter->image);
+    if (filter->prev_grey)    cvReleaseImage(&filter->image);
+    if (filter->pyramid)      cvReleaseImage(&filter->image);
+    if (filter->prev_pyramid) cvReleaseImage(&filter->image);
+    if (filter->points[0])    cvFree(&filter->points[0]);
+    if (filter->points[1])    cvFree(&filter->points[1]);
+    if (filter->status)       cvFree(&filter->status);
+    if (filter->verbose)      g_printf("\n");
+
+    // Multi tracker
+    if (filter->points_cluster) cvFree(&filter->points_cluster);
+    if (filter->vet_faces)      cvFree(&filter->vet_faces);
+
+    G_OBJECT_CLASS(parent_class)->finalize(obj);
 }
 
 
@@ -161,22 +209,65 @@ gst_facemetrix_class_init(GstFacemetrixClass *klass)
                                     g_param_spec_boolean("display", "Display",
                                                          "Sets whether the metrixed faces should be highlighted in the output",
                                                          TRUE, G_PARAM_READWRITE));
+
     g_object_class_install_property(gobject_class, PROP_PROFILE,
                                     g_param_spec_string("profile", "Profile",
                                                         "Location of Haar cascade file to use for face detection",
                                                         DEFAULT_PROFILE, G_PARAM_READWRITE));
+
     g_object_class_install_property(gobject_class, PROP_SGL_HOST,
                                     g_param_spec_string("sgl-host", "SGL server hostname",
                                                         "Hostname/IP of the SGL server",
                                                         DEFAULT_SGL_HOST, G_PARAM_READWRITE));
+
     g_object_class_install_property(gobject_class, PROP_SGL_PORT,
                                     g_param_spec_uint("sgl-port", "SGL server port",
                                                       "TCP port used by the SGL server",
                                                       0, USHRT_MAX, DEFAULT_SGL_PORT, G_PARAM_READWRITE));
+
     g_object_class_install_property(gobject_class, PROP_DEBUG,
                                     g_param_spec_boolean("debug", "Debug",
                                                          "Save detected faces images to /tmp and prints debug-related info to stdout",
                                                          FALSE, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_VERBOSE,
+                                    g_param_spec_boolean("verbose", "Verbose", "Sets whether the movement direction should be printed to the standard output.",
+                                                         TRUE, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_SHOW_PARTICLES,
+                                    g_param_spec_boolean("show-particles", "Show particles", "Sets whether particles location should be printed to the video.",
+                                                         TRUE, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_SHOW_FEATURES,
+                                    g_param_spec_boolean("show-features", "Show features", "Sets whether features location should be printed to the video.",
+                                                         TRUE, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_SHOW_FEATURES_BOX,
+                                    g_param_spec_boolean("show-features-box", "Show features box", "Sets whether features box should be printed to the video.",
+                                                         FALSE, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_SHOW_BORDERS,
+                                    g_param_spec_boolean("show-borders", "Show borders in features box", "Sets whether borders in features box should be printed to the video.",
+                                                         FALSE, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_MAX_POINTS,
+                                    g_param_spec_uint("max-points", "Max points", "Maximum number of feature points.",
+                                                      0, 2 * DEFAULT_MAX_POINTS, DEFAULT_MAX_POINTS, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_MIN_POINTS,
+                                    g_param_spec_uint("min-points", "Min points", "Minimum number of feature points accepted. If the number of points falls belows this threshold, another feature-selection is attempted",
+                                                      0, DEFAULT_MAX_POINTS, DEFAULT_MIN_POINTS, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_WIN_SIZE,
+                                    g_param_spec_uint("win-size", "Window size", "Size of the corner-subpixels window.",
+                                                      0, 2 * DEFAULT_WIN_SIZE, DEFAULT_WIN_SIZE, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_MOVEMENT_THRESHOLD,
+                                    g_param_spec_float("movement-threshold", "Movement threshold", "Threshold that defines what constitutes a left (< -THRESHOLD) or right (> THRESHOLD) movement (in average # of pixels).",
+                                                       0.0, 20 * DEFAULT_MOVEMENT_THRESHOLD, DEFAULT_MOVEMENT_THRESHOLD, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_SAMPLE_SIZE,
+                                    g_param_spec_uint("sample-size", "Sample size", "Number of particles used in Condensation", 0, DEFAULT_MAX_SAMPLE_SIZE, DEFAULT_SAMPLE_SIZE, G_PARAM_READWRITE));
 }
 
 //initialize the new element
@@ -197,13 +288,32 @@ gst_facemetrix_init(GstFacemetrix *filter, GstFacemetrixClass *gclass)
     gst_element_add_pad(GST_ELEMENT (filter), filter->sinkpad);
     gst_element_add_pad(GST_ELEMENT (filter), filter->srcpad);
 
-    filter->profile   = DEFAULT_PROFILE;
-    filter->display   = TRUE;
-    filter->sglhost   = DEFAULT_SGL_HOST;
-    filter->sglport   = DEFAULT_SGL_PORT;
-    filter->sgl       = NULL;
+    filter->profile = DEFAULT_PROFILE;
+    filter->display = TRUE;
+    filter->sglhost = DEFAULT_SGL_HOST;
+    filter->sglport = DEFAULT_SGL_PORT;
+    filter->sgl     = NULL;
     filter->debug     = FALSE;
     filter->image_idx = 0;
+
+    // tracker
+    filter->verbose            = TRUE;
+    filter->show_particles     = TRUE;
+    filter->show_features      = TRUE;
+    filter->show_features_box  = FALSE;
+    filter->show_borders       = FALSE;
+    filter->max_points         = DEFAULT_MAX_POINTS;
+    filter->min_points         = DEFAULT_MIN_POINTS;
+    filter->win_size           = DEFAULT_WIN_SIZE;
+    filter->movement_threshold = DEFAULT_MOVEMENT_THRESHOLD;
+    filter->state_dim          = DEFAULT_STATE_DIM;
+    filter->measurement_dim    = DEFAULT_MEASUREMENT_DIM;
+    filter->sample_size        = DEFAULT_SAMPLE_SIZE;
+    filter->framesProcessed    = 0;
+
+    // multi tracker
+    filter->nFaces = 0;
+    filter->init = 0;
 
     gst_facemetrix_load_profile(filter);
 }
@@ -229,6 +339,36 @@ gst_facemetrix_set_property(GObject *object, guint prop_id, const GValue *value,
             break;
         case PROP_DEBUG:
             filter->debug = g_value_get_boolean(value);
+            break;
+        case PROP_VERBOSE:
+            filter->verbose = g_value_get_boolean(value);
+            break;
+        case PROP_MAX_POINTS:
+            filter->max_points = g_value_get_uint(value);
+            break;
+        case PROP_MIN_POINTS:
+            filter->min_points = g_value_get_uint(value);
+            break;
+        case PROP_WIN_SIZE:
+            filter->win_size = g_value_get_uint(value);
+            break;
+        case PROP_MOVEMENT_THRESHOLD:
+            filter->win_size = g_value_get_float(value);
+            break;
+        case PROP_SHOW_PARTICLES:
+            filter->show_particles = g_value_get_boolean(value);
+            break;
+        case PROP_SHOW_FEATURES:
+            filter->show_features = g_value_get_boolean(value);
+            break;
+        case PROP_SHOW_FEATURES_BOX:
+            filter->show_features_box = g_value_get_boolean(value);
+            break;
+        case PROP_SHOW_BORDERS:
+            filter->show_borders = g_value_get_boolean(value);
+            break;
+        case PROP_SAMPLE_SIZE:
+            filter->sample_size = g_value_get_uint(value);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -257,6 +397,36 @@ gst_facemetrix_get_property (GObject *object, guint prop_id, GValue *value, GPar
         case PROP_DEBUG:
             g_value_set_boolean(value, filter->debug);
             break;
+        case PROP_VERBOSE:
+            g_value_set_boolean(value, filter->verbose);
+            break;
+        case PROP_MAX_POINTS:
+            g_value_set_uint(value, filter->max_points);
+            break;
+        case PROP_MIN_POINTS:
+            g_value_set_uint(value, filter->min_points);
+            break;
+        case PROP_WIN_SIZE:
+            g_value_set_uint(value, filter->win_size);
+            break;
+        case PROP_MOVEMENT_THRESHOLD:
+            g_value_set_float(value, filter->movement_threshold);
+            break;
+        case PROP_SHOW_PARTICLES:
+            g_value_set_boolean(value, filter->show_particles);
+            break;
+        case PROP_SHOW_FEATURES:
+            g_value_set_boolean(value, filter->show_features);
+            break;
+        case PROP_SHOW_FEATURES_BOX:
+            g_value_set_boolean(value, filter->show_features_box);
+            break;
+        case PROP_SHOW_BORDERS:
+            g_value_set_boolean(value, filter->show_borders);
+            break;
+        case PROP_SAMPLE_SIZE:
+            g_value_set_uint(value, filter->sample_size);
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
             break;
@@ -264,7 +434,6 @@ gst_facemetrix_get_property (GObject *object, guint prop_id, GValue *value, GPar
 }
 
 // GstElement vmethod implementations
-
 // this function handles the link with other elements
 static gboolean
 gst_facemetrix_set_caps (GstPad * pad, GstCaps * caps)
@@ -281,6 +450,7 @@ gst_facemetrix_set_caps (GstPad * pad, GstCaps * caps)
 
     filter->cvImage   = cvCreateImage(cvSize (width, height), IPL_DEPTH_8U, 3);
     filter->cvGray    = cvCreateImage(cvSize (width, height), IPL_DEPTH_8U, 1);
+    filter->cvMotion    = cvCreateImage(cvSize (width, height), IPL_DEPTH_8U, 1);
     filter->cvStorage = cvCreateMemStorage(0);
 
     // initialize sgl connection
@@ -294,9 +464,28 @@ gst_facemetrix_set_caps (GstPad * pad, GstCaps * caps)
         }
     }
 
+    // Tracker code
+    filter->width_image   = width;
+    filter->height_image  = height;
+    filter->image         = cvCreateImage(cvSize(width, height), 8, 3);
+    filter->background    = cvCreateImage(cvSize(width, height), 8, 3);
+    filter->grey          = cvCreateImage(cvSize(width, height), 8, 1);
+    filter->prev_grey     = cvCreateImage(cvSize(width, height), 8, 1);
+    filter->pyramid       = cvCreateImage(cvSize(width, height), 8, 1);
+    filter->prev_pyramid  = cvCreateImage(cvSize(width, height), 8, 1);
+    filter->points[0]     = (CvPoint2D32f*) cvAlloc(filter->max_points * sizeof(filter->points[0][0]));
+    filter->points[1]     = (CvPoint2D32f*) cvAlloc(filter->max_points * sizeof(filter->points[0][0]));
+    filter->status        = (char*) cvAlloc(filter->max_points);
+    filter->flags         = 0;
+    filter->initialized   = FALSE;
+    filter->ConDens = initCondensation(filter->state_dim, filter->measurement_dim, filter->sample_size, filter->width_image, filter->height_image);
+
+    // Multi tracker
+    filter->points_cluster  = (int*) cvAlloc(filter->max_points * sizeof(int));
+    filter->vet_faces       = (InstanceFace*) cvAlloc(MAX_NFACES * sizeof(InstanceFace));
+
     otherpad = (pad == filter->srcpad) ? filter->sinkpad : filter->srcpad;
     gst_object_unref(filter);
-
     return gst_pad_set_caps(otherpad, caps);
 }
 
@@ -304,97 +493,102 @@ gst_facemetrix_set_caps (GstPad * pad, GstCaps * caps)
 static GstFlowReturn
 gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
 {
+    gchar *id;
     GstFacemetrix *filter;
-    CvSeq *faces;
-    int i;
 
     filter = GST_FACEMETRIX (GST_OBJECT_PARENT (pad));
-
     filter->cvImage->imageData = (char *) GST_BUFFER_DATA (buf);
 
     cvCvtColor(filter->cvImage, filter->cvGray, CV_RGB2GRAY);
     cvClearMemStorage(filter->cvStorage);
 
-    if (filter->cvCascade) {
-        faces = cvHaarDetectObjects(filter->cvGray,
-                                    filter->cvCascade,
-                                    filter->cvStorage,
-                                    1.1,
-                                    2,
-                                    CV_HAAR_FIND_BIGGEST_OBJECT|CV_HAAR_DO_ROUGH_SEARCH|CV_HAAR_SCALE_IMAGE,
-                                    cvSize(20, 20));
-
-        for (i = 0; i < (faces ? faces->total : 0); i++) {
-            CvMat   face;
-            CvRect *rect;
-            char   *filename;
-            gchar *id = "__NOID__";
-
-            rect = (CvRect*) cvGetSeqElem(faces, i);
-
-            cvGetSubRect(filter->cvImage, &face, *rect);
-
-            if (!CV_IS_MAT(&face)) {
-                GST_WARNING("CvGetSubRect: unable to grab face sub-image");
-                break;
-            }
-
-            if (filter->debug) {
-                filename = g_strdup_printf("/tmp/facemetrix_image_%05d_%04d.jpg", getpid(), ++filter->image_idx);
-                cvSaveImage(filename, &face, 0);
-                g_print(">> face detected (saved as %s)\n", filename);
-                g_free(filename);
-            }
-
-            if (filter->sgl != NULL) {
-                CvMat *jpegface = cvEncodeImage(".jpg", &face, NULL);
-
-                if (!CV_IS_MAT(jpegface)) {
-                    GST_WARNING("CvGetSubRect: unable to convert face sub-image to jpeg format");
-                    cvDecRefData(&face);
-                    break;
-                }
-                if ((id = sgl_client_recognize(filter->sgl, FALSE, (gchar*) jpegface->data.ptr, jpegface->rows * jpegface->step)) == NULL) {
-                    GST_WARNING("[sgl] unable to get user id");
-                } else if (filter->debug) {
-                    g_print("[sgl] id: %s\n", id);
-                }
-
-                cvReleaseMat(&jpegface);
-            }
-
-            cvDecRefData(&face);
-
-            //GstStructure *s = gst_structure_new("face",
-            //                                    "x", G_TYPE_UINT, r->x,
-            //                                    "y", G_TYPE_UINT, r->y,
-            //                                    "width", G_TYPE_UINT, r->width,
-            //                                    "height", G_TYPE_UINT, r->height,
-            //                                    "id", G_TYPE_STRING, id, NULL);
-
-            //GstMessage *m = gst_message_new_element(GST_OBJECT (filter), s);
-            //gst_element_post_message(GST_ELEMENT (filter), m);
-
-            //if (filter->display) {
-            //    CvPoint center, center_bottom;
-            //    CvFont font;
-            //    int radius;
-
-            //    center.x = cvRound((r->x + r->width * 0.5));
-            //    center.y = cvRound((r->y + r->height * 0.5));
-            //    radius = cvRound((r->width + r->height) * 0.25);
-            //    cvCircle(filter->cvImage, center, radius, CV_RGB (255, 32, 32), 3, 8, 0);
-
-            //    // FIXME: fix the code below
-            //    center_bottom.x = center.x;
-            //    center_bottom.y = center.y > 10 ? center.y - 10 : 0;
-            //    cvInitFont(&font, CV_FONT_HERSHEY_SIMPLEX, 1.0f, 1.0f, 0.0f, 1, 8);
-            //    cvPutText(filter->cvImage, id, center_bottom, &font , CV_RGB(255, 32, 32));
-            //}
-        }
+    // Tracker code
+    IplImage *swap_temp;
+    CvPoint2D32f *swap_points;
+    float avg_x = 0.0;
+    filter->image->imageData = (char *) GST_BUFFER_DATA(buf);
+    cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
+    CvRect particlesBoundary;
+    if (filter->initialized){
+        getParticlesBoundary(filter->ConDens, &particlesBoundary, filter->width_image, filter->height_image);
     }
 
-    gst_buffer_set_data(buf, (guchar*) filter->cvImage->imageData, filter->cvImage->imageSize);
+    // Detect frames rect motion
+    int i,j;
+    CvSeq *motions = motion_detect_mult(filter->cvImage, filter->cvMotion);
+    for (i = 0; i < motions->total; i++) {
+
+        CvRect rect_motion = ((CvConnectedComp*) cvGetSeqElem(motions, i))->rect;
+
+        // Display motion box
+        drawFaceIdentify(filter->cvImage, NULL, rect_motion, COLOR_WHITE);
+
+        // For each motion box, detect his faces
+        if (filter->cvCascade && (rect_motion.width + rect_motion.height != 0)) {
+
+            cvSetImageROI(filter->cvGray, rect_motion);
+            CvSeq *faces = cvHaarDetectObjects(
+                filter->cvGray,
+                filter->cvCascade,
+                filter->cvStorage,
+                1.1,
+                MIN_FACE_NEIGHBORS,
+                //0|CV_HAAR_FIND_BIGGEST_OBJECT,
+                0|CV_HAAR_SCALE_IMAGE,
+                cvSize (MIN_FACEBOX_SIDE, MIN_FACEBOX_SIDE));
+            cvResetImageROI(filter->cvGray);
+
+            for (j = 0; j < (faces ? faces->total : 0); j++) {
+
+                CvMat   face;
+                CvRect *rect = (CvRect*) cvGetSeqElem(faces, j);
+
+                cvGetSubRect(filter->cvImage, &face, *rect);
+
+                if (!CV_IS_MAT(&face)) {
+                    GST_WARNING("CvGetSubRect: unable to grab face sub-image");
+                    break;
+                }
+
+                if (filter->debug) {
+                    char   *filename;
+                    filename = g_strdup_printf("/tmp/facemetrix_image_%05d_%04d.jpg", getpid(), ++filter->image_idx);
+                    cvSaveImage(filename, &face, 0);
+                    g_print(">> face detected (saved as %s)\n", filename);
+                    g_free(filename);
+                }
+
+                if (filter->sgl != NULL) {
+                    CvMat *jpegface = cvEncodeImage(".jpg", &face, NULL);
+
+                    if (!CV_IS_MAT(jpegface)) {
+                        GST_WARNING("CvGetSubRect: unable to convert face sub-image to jpeg format");
+                        cvDecRefData(&face);
+                        break;
+                    }
+                    if ((id = sgl_client_recognize(filter->sgl, FALSE, (gchar*) jpegface->data.ptr, jpegface->rows * jpegface->step)) == NULL) {
+                        GST_WARNING("[sgl] unable to get user id");
+                    } else if (filter->debug) {
+                        g_print("[sgl] id: %s\n", id);
+                    }
+
+                    cvReleaseMat(&jpegface);
+                }
+
+                cvDecRefData(&face);
+
+                // Draw face box
+                drawFaceIdentify(filter->cvImage,id,
+                    cvRect(rect_motion.x+rect->x, rect_motion.y+rect->y, rect->width, rect->height),
+                    COLOR_GREEN);
+
+            }// for faces
+        }// if cascade
+    }// for motions
+
+    // TODO: insert tracker code here
+
+    gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
     return gst_pad_push(filter->srcpad, buf);
 }
 

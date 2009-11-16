@@ -49,7 +49,11 @@
 
 #include <gst/gst.h>
 #include <cv.h>
+#include <highgui.h>
+#include <cvaux.h>
 #include "sglclient.h"
+#include "identifier_motion.h"
+#include "../tracker/condensation.h"
 
 G_BEGIN_DECLS
 
@@ -61,6 +65,15 @@ G_BEGIN_DECLS
 
 typedef struct _GstFacemetrix GstFacemetrix;
 typedef struct _GstFacemetrixClass GstFacemetrixClass;
+typedef struct _InstanceFace InstanceFace;
+
+
+// Multi tracker
+#define MAX_NAME_LEN 50
+struct _InstanceFace{
+    char name[MAX_NAME_LEN];
+    CvRect rect;
+};
 
 struct _GstFacemetrix
 {
@@ -68,13 +81,13 @@ struct _GstFacemetrix
 
     GstPad                  *sinkpad;
     GstPad                  *srcpad;
-
     gboolean                 debug;
     gboolean                 display;
     gchar                   *profile;
 
     IplImage                *cvImage;
     IplImage                *cvGray;
+    IplImage                *cvMotion;
     CvHaarClassifierCascade *cvCascade;
     CvMemStorage            *cvStorage;
 
@@ -82,6 +95,39 @@ struct _GstFacemetrix
     gchar                   *sglhost;
     guint                    sglport;
     guint                    image_idx;
+
+    // tracker
+    IplImage *image, *grey, *prev_grey, *pyramid, *prev_pyramid;
+    CvPoint2D32f *points[2];
+    char *status;
+    guint flags;
+    int count;
+    float prev_avg_x;
+    gboolean initialized;
+    gboolean verbose;
+    gboolean show_particles;
+    gboolean show_features;
+    gboolean show_features_box;
+    gboolean show_borders;
+    guint max_points;
+    guint min_points;
+    guint win_size;
+    float movement_threshold;
+    CvConDensation* ConDens;
+    int state_dim, measurement_dim;
+    int sample_size;
+    int width_image, height_image;
+    int nframesToLearnBG;
+    int framesProcessed;
+    CvBGCodeBookModel* backgroundModel;
+    IplImage* background;
+
+    // Multi tracker
+    int nFaces;
+    int init;
+    int *points_cluster;
+    InstanceFace *vet_faces;
+
 };
 
 struct _GstFacemetrixClass
