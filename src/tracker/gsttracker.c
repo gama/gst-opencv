@@ -169,8 +169,8 @@ gst_tracker_base_init(gpointer gclass)
     gst_element_class_set_details_simple(element_class,
                                          "tracker",
                                          "Filter/Effect/Video",
-                                         "Apply the motion-tracking Lucas-Kanade optical flow algorithm.",
-                                         "Gustavo Machado C. Gama <gam@vettalabs.com>");
+                                         "Track the motion of objects of a scene",
+                                         "Erickson Rangel do Nascimento <erickson@vettalabs.com>");
 
     gst_element_class_add_pad_template(element_class,
                                         gst_static_pad_template_get(&src_factory));
@@ -610,6 +610,6 @@ gboolean
 gst_tracker_plugin_init(GstPlugin * plugin)
 {
     /* debug category for fltering log messages */
-    GST_DEBUG_CATEGORY_INIT(gst_tracker_debug, "tracker", 0, "Applied the motion-tracking Kalman Filter.");
+    GST_DEBUG_CATEGORY_INIT(gst_tracker_debug, "tracker", 0, "Track the motion of objects of a scene");
     return gst_element_register(plugin, "tracker", GST_RANK_NONE, GST_TYPE_TRACKER);
 }
