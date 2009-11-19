@@ -139,7 +139,6 @@ CvRect  motion_detect( IplImage* img, IplImage* motionHist)
     return comp_rect_bigger;
 }
 
-
 CvSeq*  motion_detect_mult( IplImage* img, IplImage* motionHist){
     double timestamp = (double)clock()/CLOCKS_PER_SEC; // get current time in seconds
     CvSize size = cvSize(img->width,img->height); // get current frame size

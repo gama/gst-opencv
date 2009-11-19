@@ -10,4 +10,3 @@ CvRect motion_detect( IplImage* img, IplImage* motionHist);
 CvSeq* motion_detect_mult( IplImage* img, IplImage* motionHist);
 
 #endif	/* _IDENTIFIER_MOTION_H */
-

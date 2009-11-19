@@ -61,13 +61,15 @@
 #include <config.h>
 #endif
 
+/*
 #include <unistd.h>
 #include <gst/gst.h>
 #include <highgui.h>
 #include <glib/gprintf.h>
 
-#include "gstfacemetrix.h"
 #include "draw.h"
+*/
+#include "gstfacemetrix.h"
 
 // transition matrix F describes model parameters at and k and k+1
 static const float F[] = { 1, 1, 0, 1 };
@@ -109,7 +111,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_facemetrix_debug);
 #define DEFAULT_SGL_HOST "localhost"
 #define DEFAULT_SGL_PORT 1500
 
-#define MAX_NFACES 10
+//#define MAX_NFACES 10
 #define MIN_FACE_NEIGHBORS 5    //2~5
 #define MIN_FACEBOX_SIDE 20
 
@@ -171,7 +173,7 @@ gst_facemetrix_finalize (GObject * obj)
 
     // Multi tracker
     if (filter->points_cluster) cvFree(&filter->points_cluster);
-    if (filter->vet_faces)      cvFree(&filter->vet_faces);
+    //if (filter->vet_faces)      cvFree(&filter->vet_faces);
 
     G_OBJECT_CLASS(parent_class)->finalize(obj);
 }
@@ -483,7 +485,6 @@ gst_facemetrix_set_caps (GstPad * pad, GstCaps * caps)
 
     // Multi tracker
     filter->points_cluster  = (int*) cvAlloc(filter->max_points * sizeof(int));
-    filter->vet_faces       = (InstanceFace*) cvAlloc(MAX_NFACES * sizeof(InstanceFace));
 
     otherpad = (pad == filter->srcpad) ? filter->sinkpad : filter->srcpad;
     gst_object_unref(filter);
@@ -494,7 +495,7 @@ gst_facemetrix_set_caps (GstPad * pad, GstCaps * caps)
 static GstFlowReturn
 gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
 {
-    gchar *id = "__UNKNOWN__";
+    gchar *id = SGL_UNKNOWN_FACE_ID;
     GstFacemetrix *filter;
 
     filter = GST_FACEMETRIX (GST_OBJECT_PARENT (pad));
@@ -504,13 +505,16 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
     cvClearMemStorage(filter->cvStorage);
 
     // Tracker code
+    IplImage *swap_temp;
+    CvPoint2D32f *swap_points;
+    float avg_x = 0.0;
     filter->image->imageData = (char *) GST_BUFFER_DATA(buf);
     cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
     CvRect particlesBoundary;
     if (filter->initialized){
         getParticlesBoundary(filter->ConDens, &particlesBoundary, filter->width_image, filter->height_image);
     }
-
+    
     // Detect frames rect motion
     int i,j;
     CvSeq *motions = motion_detect_mult(filter->cvImage, filter->cvMotion);
@@ -518,8 +522,20 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
 
         CvRect rect_motion = ((CvConnectedComp*) cvGetSeqElem(motions, i))->rect;
 
+        // If already tracker face in this motionBox, discard then...
+        /*
+        int m;
+        int existFaceInThisMotionRect = 0;
+        for (m=0; m<filter->nFaces; ++m)
+            if(rectIntercept(&rect_motion, &filter->vet_faces[m].rect)){
+                existFaceInThisMotionRect = 1;
+                break;
+            }
+        if(existFaceInThisMotionRect) continue;
+        */
+
         // Display motion box
-        drawFaceIdentify(filter->cvImage, NULL, rect_motion, COLOR_WHITE);
+        drawFaceIdentify(filter->cvImage, NULL, rect_motion, COLOR_WHITE, 1);
 
         // For each motion box, detect his faces
         if (filter->cvCascade && (rect_motion.width + rect_motion.height != 0)) {
@@ -540,6 +556,20 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
 
                 CvMat   face;
                 CvRect *rect = (CvRect*) cvGetSeqElem(faces, j);
+
+                // Absolut rectBox for this face
+                CvRect thisRectFace = cvRect(rect_motion.x+rect->x, rect_motion.y+rect->y, rect->width, rect->height);
+
+                // If already identify face in this rectFace, discard then...
+                int m;
+                int existFaceInThisFaceRect = 0;
+                for (m=0; m<filter->nFaces; ++m)
+                    if(rectIntercept(&thisRectFace, &filter->vet_faces[m].rect)){
+                        existFaceInThisFaceRect = 1;
+                        break;
+                    }
+                if(existFaceInThisFaceRect) continue;
+
 
                 cvGetSubRect(filter->cvImage, &face, *rect);
 
@@ -575,16 +605,225 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
 
                 cvDecRefData(&face);
 
-                // Draw face box
-                drawFaceIdentify(filter->cvImage,id,
-                    cvRect(rect_motion.x+rect->x, rect_motion.y+rect->y, rect->width, rect->height),
-                    COLOR_GREEN);
+                // Draw first face box
+                drawFaceIdentify(filter->cvImage, id, thisRectFace, COLOR_GREEN, 1);
+
+                // Storage if identified
+                if(filter->nFaces < MAX_NFACES && strcmp(id, SGL_UNKNOWN_FACE_ID) != 0){
+                    filter->vet_faces[filter->nFaces].rect = thisRectFace;
+                    sprintf(filter->vet_faces[filter->nFaces].name, "%s", id);
+                    filter->nFaces++;
+
+                    // Re-init the tracker
+                    filter->init = 0;
+                }
 
             }// for faces
         }// if cascade
     }// for motions
 
-    // TODO: insert tracker code here
+
+    // If the face has been located, then starts tracker
+    if(filter->nFaces){
+
+        // Init multi tracker
+        if(!filter->init){
+
+            filter->init = 1;
+
+            CvPoint2D32f *points_temp = (CvPoint2D32f*) cvAlloc(filter->max_points * sizeof(points_temp[0]));
+            int count_temp;
+            int count_n_agreg = 0;
+            int i_faces;
+            for(i_faces = 0; i_faces < filter->nFaces; ++i_faces){
+
+                // automatic initialization
+                IplImage* eig         = cvCreateImage(cvGetSize(filter->grey), 32, 1);
+                IplImage* temp        = cvCreateImage(cvGetSize(filter->grey), 32, 1);
+
+                int i;
+                double quality      = 0.01;
+                double min_distance = 10;
+
+                cvSetImageROI( filter->grey, filter->vet_faces[i_faces].rect );
+
+                filter->count = filter->max_points;
+                filter->prev_avg_x = -1.0;
+                cvGoodFeaturesToTrack(filter->grey, eig, temp, points_temp, &(filter->count), quality,
+                                      min_distance, 0, 3, 0, 0.04);
+
+                count_temp = filter->count;
+
+                int win_size;
+                if (filter->vet_faces[i_faces].rect.width <= (10*2+5) || filter->vet_faces[i_faces].rect.height <= (10*2+5)){
+                    win_size = filter->vet_faces[i_faces].rect.width < filter->vet_faces[i_faces].rect.height ? filter->vet_faces[i_faces].rect.width : filter->vet_faces[i_faces].rect.height;
+                    win_size = (win_size-5)/2;
+                }else win_size = filter->win_size;
+
+                cvFindCornerSubPix(filter->grey, points_temp, count_temp, cvSize(win_size, win_size),
+                                   cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03));
+
+                // Displacement coordinates according ROI
+                for(i = 0; i < count_temp; i++){
+                    filter->points[1][count_n_agreg].x = points_temp[i].x + filter->vet_faces[i_faces].rect.x;
+                    filter->points[1][count_n_agreg].y = points_temp[i].y + filter->vet_faces[i_faces].rect.y;
+                    ++count_n_agreg;
+                }
+
+                // Storage the first features centroid of this face
+                CvRect rect = rectBoudingIdx(points_temp, count_temp, -1, NULL);
+                CvPoint point = cvPoint(rect.x+(rect.width/2), rect.y+(rect.height/2));
+                filter->vet_faces[i_faces].point.x = point.x + filter->vet_faces[i_faces].rect.x;
+                filter->vet_faces[i_faces].point.y = point.y + filter->vet_faces[i_faces].rect.y;
+                filter->vet_faces[i_faces].nPoints = count_temp;
+                filter->vet_faces[i_faces].nPoints_orig = count_temp;
+
+                cvResetImageROI( filter->grey );
+                cvReleaseImage(&eig);
+                cvReleaseImage(&temp);
+
+            }//for faces
+
+            cvFree(&points_temp);
+            filter->count = count_n_agreg;
+
+        }else{
+
+            int n_points_delete = 0;
+            CvPoint2D32f *points_delete = (CvPoint2D32f*) cvAlloc(filter->max_points * sizeof(points_delete[0]));
+
+            int i, k, j, m;
+
+            getParticlesBoundary(filter->ConDens, &particlesBoundary, filter->cvImage->width, filter->cvImage->height);
+            cvCalcOpticalFlowPyrLK(filter->prev_grey, filter->grey, filter->prev_pyramid, filter->pyramid,
+                                   filter->points[0], filter->points[1], filter->count, cvSize(filter->win_size, filter->win_size),
+                                   3, filter->status, 0, cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03),
+                                   filter->flags);
+            filter->flags |= CV_LKFLOW_PYR_A_READY;
+
+            double measurement_x, measurement_y;
+            centroid(filter->points[1], filter->count, &measurement_x, &measurement_y);
+            //if (filter->show_particles)
+            //    cvCircle( filter->cvImage, cvPoint(measurement_x, measurement_y), 3, CV_RGB(255,0,0), -1, 8,0);
+
+            double predicted_x, predicted_y;
+            updateCondensation(filter->cvImage, filter->ConDens,  measurement_x, measurement_y, 0, &predicted_x, &predicted_y); // points is the measured points
+
+            //if (filter->show_features)
+            //    cvCircle( filter->cvImage, cvPoint(predicted_x, predicted_y), 3, CV_RGB(0,255,0), -1, 8,0);
+
+            for (j = i = k = 0; i < filter->count; ++i) {
+                if (    !filter->status[i] || 
+                        filter->points[1][i].x < particlesBoundary.x || 
+                        filter->points[1][i].x > particlesBoundary.x+particlesBoundary.width ||
+                        filter->points[1][i].y < particlesBoundary.y ||
+                        filter->points[1][i].y > particlesBoundary.y+particlesBoundary.height ){
+                
+                    points_delete[j] = filter->points[1][i];
+                    ++n_points_delete;
+                    continue;
+                }
+
+                filter->points[1][k++] = filter->points[1][i];
+                avg_x += (float) filter->points[1][i].x;
+
+                //if (filter->show_features)
+                //    cvCircle(filter->cvImage, cvPointFrom32f(filter->points[1][i]), 3, CV_RGB(255, 255, 0), -1, 8, 0);
+
+            }
+            filter->count = k;
+            avg_x /= (float) filter->count;
+
+            // Decrements delet points of respective faces
+            for (m=0; m<n_points_delete; ++m){
+                int closerIdx = -1;
+                float minDistTemp, minDist = -1;
+                int h;
+                for(h = 0; h < filter->nFaces; ++h){
+                    minDistTemp = distRectToPoint(filter->vet_faces[h].rect, cvPointFrom32f(points_delete[m]));
+                    if(minDist == -1 || minDistTemp < minDist){
+                        minDist = minDistTemp;
+                        closerIdx = h;
+                    }
+                }
+                filter->vet_faces[closerIdx].nPoints--;
+            }
+            
+            // Delete points if them rectFace with great loss of points off.
+            for (i = k = 0; i < filter->count; ++i) {
+                int thisToDel = 0;
+                for (m=0; m<filter->nFaces; ++m){
+                    if(filter->vet_faces[m].nPoints/filter->vet_faces[m].nPoints_orig < MINPOINTSKEEPFACE_PERC
+                            && pointIntoDect(filter->vet_faces[m].rect, cvPointFrom32f(filter->points[1][i])))
+                        ++thisToDel;
+                    break;
+                }
+                if(thisToDel) continue;
+                filter->points[1][k++] = filter->points[1][i];
+            }
+            filter->count = k;
+            
+            //Deletes rectFace with great loss of points or no points
+            for(j = m = 0; j < filter->nFaces; ++j){
+                if(!filter->vet_faces[j].nPoints ||
+                        filter->vet_faces[j].nPoints/filter->vet_faces[j].nPoints_orig < MINPOINTSKEEPFACE_PERC ){
+                    for(i = j; i < filter->nFaces; ++i)
+                        filter->vet_faces[i] = filter->vet_faces[i+1];
+                    ++m;
+                }else{
+                    filter->vet_faces[j].nPoints_orig = filter->vet_faces[j].nPoints;
+                }
+            }
+            filter->nFaces -= m;
+
+            // Locale update of rest faces
+            if(filter->nFaces){
+
+                // Find and update reference FaceRect
+                doKmeans(filter->nFaces, filter->count, filter->points[1], filter->points_cluster);
+                for (m=0; m<filter->nFaces; ++m){
+
+                    // Get centroid of this face points
+                    CvRect rect = rectBoudingIdx(filter->points[1], filter->count, m, filter->points_cluster);
+                    CvPoint point = cvPoint(rect.x+(rect.width/2), rect.y+(rect.height/2));
+
+                    // Locates the reference FaceRect (more closer)
+                    int closerIdx = -1;
+                    float minDistTemp, minDist = -1;
+                    int h;
+                    for(h = 0; h < filter->nFaces; ++h){
+                        minDistTemp = distRectToPoint(filter->vet_faces[h].rect, point);
+                        if(minDist == -1 || minDistTemp < minDist){
+                            minDist = minDistTemp;
+                            closerIdx = h;
+                        }
+                    }
+
+                    // Update the FaceRect coordinates
+                    filter->vet_faces[closerIdx].rect.x += point.x - filter->vet_faces[closerIdx].point.x;
+                    filter->vet_faces[closerIdx].rect.y += point.y - filter->vet_faces[closerIdx].point.y;
+                    filter->vet_faces[closerIdx].point.x = point.x;
+                    filter->vet_faces[closerIdx].point.y = point.y;
+                }
+            }
+
+            cvFree(&points_delete);
+        }//init
+
+        // Draw identified faces
+        int u;
+        for(u = 0; u < filter->nFaces; ++u)
+            drawFaceIdentify(filter->cvImage, filter->vet_faces[u].name,
+                filter->vet_faces[u].rect, COLOR_MAGENTA, 0);
+
+        filter->prev_avg_x = avg_x;
+
+        CV_SWAP(filter->prev_grey, filter->grey, swap_temp);
+        CV_SWAP(filter->prev_pyramid, filter->pyramid, swap_temp);
+        CV_SWAP(filter->points[0], filter->points[1], swap_points);
+        filter->initialized = TRUE;
+
+    }// if nFaces
 
     gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
     return gst_pad_push(filter->srcpad, buf);

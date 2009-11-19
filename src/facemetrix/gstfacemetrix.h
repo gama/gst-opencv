@@ -51,9 +51,15 @@
 #include <cv.h>
 #include <highgui.h>
 #include <cvaux.h>
+#include <unistd.h>
+#include <glib/gprintf.h>
+
+#include "draw.h"
+#include "kmeans.h"
 #include "sglclient.h"
 #include "identifier_motion.h"
 #include "../tracker/condensation.h"
+
 
 G_BEGIN_DECLS
 
@@ -67,12 +73,17 @@ typedef struct _GstFacemetrix GstFacemetrix;
 typedef struct _GstFacemetrixClass GstFacemetrixClass;
 typedef struct _InstanceFace InstanceFace;
 
-
 // Multi tracker
 #define MAX_NAME_LEN 50
+#define MAX_NFACES 10
+#define MINPOINTSKEEPFACE_PERC 0.8
+
 struct _InstanceFace{
     char name[MAX_NAME_LEN];
     CvRect rect;
+    CvPoint point;
+    int nPoints;
+    int nPoints_orig;
 };
 
 struct _GstFacemetrix
@@ -126,7 +137,7 @@ struct _GstFacemetrix
     int nFaces;
     int init;
     int *points_cluster;
-    InstanceFace *vet_faces;
+    InstanceFace vet_faces[MAX_NFACES];
 
 };
 
