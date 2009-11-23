@@ -27,6 +27,6 @@ void pt(char *s);
 void drawFaceIdentify(IplImage *dst, gchar *idFace, CvRect rectFace, CvScalar color, int drawRect);
 int rectIntercept(CvRect *a, CvRect *b);
 float distRectToPoint(CvRect rect, CvPoint point);
-int pointIntoDect(CvRect rect, CvPoint point);
+int pointIntoRect(CvRect rect, CvPoint point);
 
 #endif

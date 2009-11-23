@@ -102,6 +102,8 @@ struct _GstTracker
     int framesProcessed;
     CvBGCodeBookModel* backgroundModel;
     IplImage* background;
+
+    IplImage* cvMotion;
 };
 
 struct _GstTrackerClass

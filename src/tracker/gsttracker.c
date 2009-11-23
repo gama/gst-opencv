@@ -156,6 +156,8 @@ gst_tracker_finalize(GObject * obj)
     if (filter->background)         cvReleaseImage(&filter->background);
     if (filter->backgroundModel)    cvReleaseBGCodeBookModel(&filter->backgroundModel);
 
+    if (filter->cvMotion)         cvReleaseImage (&filter->cvMotion);
+
     G_OBJECT_CLASS(parent_class)->finalize(obj);
 }
 
@@ -405,6 +407,7 @@ gst_tracker_set_caps(GstPad * pad, GstCaps * caps)
     filter->prev_grey     = cvCreateImage(cvSize(width, height), 8, 1);
     filter->pyramid       = cvCreateImage(cvSize(width, height), 8, 1);
     filter->prev_pyramid  = cvCreateImage(cvSize(width, height), 8, 1);
+    filter->cvMotion      = cvCreateImage(cvSize(width, height), 8, 1);
     filter->points[0]     = (CvPoint2D32f*) cvAlloc(filter->max_points * sizeof(filter->points[0][0]));
     filter->points[1]     = (CvPoint2D32f*) cvAlloc(filter->max_points * sizeof(filter->points[0][0]));
     filter->status        = (char*) cvAlloc(filter->max_points);
@@ -529,9 +532,16 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
         if (filter->show_particles)
             cvCircle( filter->image, cvPoint(measurement_x, measurement_y), 3, CV_RGB(255,0,0), -1, 8,0);
 
+        // Updated to be in line with faceMetrix updateCondensation
+        CvPoint vetCentroids[1];
+        vetCentroids[0].x = measurement_x;
+        vetCentroids[0].y = measurement_y;
+        updateCondensation(filter->image, filter->ConDens, vetCentroids, 1, filter->show_particles);
+        
         double predicted_x, predicted_y;
+        predicted_x = filter->ConDens->State[0];
+        predicted_y = filter->ConDens->State[1];
 
-        updateCondensation(filter->image, filter->ConDens,  measurement_x, measurement_y, filter->show_particles, &predicted_x, &predicted_y); // points is the measured points
         if (filter->show_features)
             cvCircle( filter->image, cvPoint(predicted_x, predicted_y), 3, CV_RGB(0,255,0), -1, 8,0);
  

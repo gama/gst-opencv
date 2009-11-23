@@ -2,7 +2,7 @@
 
 CvRect onlyBiggerObject( IplImage* frameBW ){
 
-    CvSeq *c, *cBig;
+    CvSeq *c, *cBig = NULL;
     CvMemStorage *tempStorage = cvCreateMemStorage(0);
     CvMat mstub;
     CvMat *mask = cvGetMat(frameBW, &mstub, 0, 0);

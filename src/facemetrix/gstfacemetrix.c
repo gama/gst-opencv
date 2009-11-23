@@ -152,7 +152,7 @@ gst_facemetrix_finalize (GObject * obj)
     if (filter->cvImage) {
         cvReleaseImage (&filter->cvImage);
         cvReleaseImage (&filter->cvGray);
-	    cvReleaseImage (&filter->cvMotion);
+	cvReleaseImage (&filter->cvMotion);
     }
     if (filter->sgl != NULL) {
         sgl_client_close(filter->sgl);
@@ -453,7 +453,7 @@ gst_facemetrix_set_caps (GstPad * pad, GstCaps * caps)
 
     filter->cvImage   = cvCreateImage(cvSize (width, height), IPL_DEPTH_8U, 3);
     filter->cvGray    = cvCreateImage(cvSize (width, height), IPL_DEPTH_8U, 1);
-    filter->cvMotion    = cvCreateImage(cvSize (width, height), IPL_DEPTH_8U, 1);
+    filter->cvMotion  = cvCreateImage(cvSize (width, height), IPL_DEPTH_8U, 1);
     filter->cvStorage = cvCreateMemStorage(0);
 
     // initialize sgl connection
@@ -510,10 +510,6 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
     float avg_x = 0.0;
     filter->image->imageData = (char *) GST_BUFFER_DATA(buf);
     cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
-    CvRect particlesBoundary;
-    if (filter->initialized){
-        getParticlesBoundary(filter->ConDens, &particlesBoundary, filter->width_image, filter->height_image);
-    }
     
     // Detect frames rect motion
     int i,j;
@@ -628,7 +624,6 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
 
         // Init multi tracker
         if(!filter->init){
-
             filter->init = 1;
 
             CvPoint2D32f *points_temp = (CvPoint2D32f*) cvAlloc(filter->max_points * sizeof(points_temp[0]));
@@ -693,32 +688,43 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
             CvPoint2D32f *points_delete = (CvPoint2D32f*) cvAlloc(filter->max_points * sizeof(points_delete[0]));
 
             int i, k, j, m;
-
-            getParticlesBoundary(filter->ConDens, &particlesBoundary, filter->cvImage->width, filter->cvImage->height);
             cvCalcOpticalFlowPyrLK(filter->prev_grey, filter->grey, filter->prev_pyramid, filter->pyramid,
                                    filter->points[0], filter->points[1], filter->count, cvSize(filter->win_size, filter->win_size),
                                    3, filter->status, 0, cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03),
                                    filter->flags);
             filter->flags |= CV_LKFLOW_PYR_A_READY;
 
-            double measurement_x, measurement_y;
-            centroid(filter->points[1], filter->count, &measurement_x, &measurement_y);
-            //if (filter->show_particles)
-            //    cvCircle( filter->cvImage, cvPoint(measurement_x, measurement_y), 3, CV_RGB(255,0,0), -1, 8,0);
+            doKmeans(filter->nFaces, filter->count, filter->points[1], filter->points_cluster);
 
-            double predicted_x, predicted_y;
-            updateCondensation(filter->cvImage, filter->ConDens,  measurement_x, measurement_y, 0, &predicted_x, &predicted_y); // points is the measured points
+            CvPoint vetCentroids[MAX_NFACES];
+            for (m=0; m<filter->nFaces; ++m){
+                CvRect rect = rectBoudingIdx(filter->points[1], filter->count, m, filter->points_cluster);
+                vetCentroids[m].x = rect.x + rect.width/2;
+                vetCentroids[m].y = rect.y + rect.height/2;
 
-            //if (filter->show_features)
-            //    cvCircle( filter->cvImage, cvPoint(predicted_x, predicted_y), 3, CV_RGB(0,255,0), -1, 8,0);
+                if (filter->show_particles)
+                    cvCircle( filter->cvImage, vetCentroids[m], 3, CV_RGB(255,0,0), -1, 8,0);
+            }
+
+            //double predicted_x, predicted_y;
+            CvRect *particleRects = (CvRect *)malloc(filter->nFaces * sizeof (CvRect));
+            updateCondensation(filter->cvImage, filter->ConDens, vetCentroids, filter->nFaces, filter->show_particles); // points is the measured points
+
+            int *vetParticlesIdx = (int *)malloc(filter->ConDens->SamplesNum * sizeof (int));
+            floatDoKmeans(filter->nFaces, filter->ConDens->SamplesNum, filter->ConDens->flSamples, vetParticlesIdx);
+
+            for(i = 0; i < filter->nFaces; ++i)
+                particleRects[i] = floatRectBoudingIdx(filter->ConDens->flSamples, filter->ConDens->SamplesNum, i, vetParticlesIdx);
+            free(vetParticlesIdx);
 
             for (j = i = k = 0; i < filter->count; ++i) {
-                if (    !filter->status[i] || 
-                        filter->points[1][i].x < particlesBoundary.x || 
-                        filter->points[1][i].x > particlesBoundary.x+particlesBoundary.width ||
-                        filter->points[1][i].y < particlesBoundary.y ||
-                        filter->points[1][i].y > particlesBoundary.y+particlesBoundary.height ){
-                
+
+                for(m = 0; m < filter->nFaces; ++m){
+                    if (pointIntoRect(particleRects[m], cvPointFrom32f(filter->points[1][i])) && filter->status[i])
+                        break;
+                }
+
+                if(m == filter->nFaces || !filter->status[i]) {
                     points_delete[j] = filter->points[1][i];
                     ++n_points_delete;
                     continue;
@@ -727,14 +733,15 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
                 filter->points[1][k++] = filter->points[1][i];
                 avg_x += (float) filter->points[1][i].x;
 
-                //if (filter->show_features)
-                //    cvCircle(filter->cvImage, cvPointFrom32f(filter->points[1][i]), 3, CV_RGB(255, 255, 0), -1, 8, 0);
-
+                if (filter->show_features)
+                    cvCircle(filter->cvImage, cvPointFrom32f(filter->points[1][i]), 3, CV_RGB(255, 255, 0), -1, 8, 0);
             }
+            free(particleRects);
+
             filter->count = k;
             avg_x /= (float) filter->count;
 
-            // Decrements delet points of respective faces
+            // Decrements delete points of respective faces
             for (m=0; m<n_points_delete; ++m){
                 int closerIdx = -1;
                 float minDistTemp, minDist = -1;
@@ -754,7 +761,7 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
                 int thisToDel = 0;
                 for (m=0; m<filter->nFaces; ++m){
                     if(filter->vet_faces[m].nPoints/filter->vet_faces[m].nPoints_orig < MINPOINTSKEEPFACE_PERC
-                            && pointIntoDect(filter->vet_faces[m].rect, cvPointFrom32f(filter->points[1][i])))
+                            && pointIntoRect(filter->vet_faces[m].rect, cvPointFrom32f(filter->points[1][i])))
                         ++thisToDel;
                     break;
                 }
@@ -824,7 +831,6 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
         filter->initialized = TRUE;
 
     }// if nFaces
-
     gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
     return gst_pad_push(filter->srcpad, buf);
 }

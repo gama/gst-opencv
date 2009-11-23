@@ -1,5 +1,29 @@
 #include "kmeans.h"
 
+void floatDoKmeans(int nClusters, int nPoints, float **vetPoints, int *vetPointsClusterIdx){
+    int k;
+    CvMat* points = cvCreateMat( nPoints, 1, CV_32FC2 );
+    CvMat* clusters = cvCreateMat( nPoints, 1, CV_32SC1 );
+
+    for( k = 0; k < nPoints; k++ ){
+        points->data.fl[k*2] = vetPoints[k][0];
+        points->data.fl[k*2+1] = vetPoints[k][1];
+    }
+
+    cvKMeans2( points, nClusters, clusters,
+            cvTermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 10, 1.0 ),
+            5, 0, 0, 0, 0 );
+
+    for( k = 0; k < nPoints; k++ ){
+        vetPointsClusterIdx[k] = clusters->data.i[k];
+    }
+
+    cvReleaseMat( &points );
+    cvReleaseMat( &clusters );
+
+    return;
+}
+
 void doKmeans(int nClusters, int nPoints, CvPoint2D32f *vetPoints, int *vetPointsClusterIdx){
     int k;
     CvMat* points = cvCreateMat( nPoints, 1, CV_32FC2 );
@@ -36,6 +60,22 @@ CvRect rectBoudingIdx(CvPoint2D32f *measurement, int size, int idx, int *vetPoin
         if(y_min == -1 || measurement[i].y < y_min) y_min = measurement[i].y;
         if(x_max == -1 || measurement[i].x > x_max) x_max = measurement[i].x;
         if(y_max == -1 || measurement[i].y > y_max) y_max = measurement[i].y;
+    }
+    return cvRect(x_min, y_min, x_max-x_min, y_max-y_min);
+}
+
+CvRect floatRectBoudingIdx(float **measurement, int size, int idx, int *vetPointsClusterIdx){
+    int x_min = -1;
+    int y_min = -1;
+    int x_max = -1;
+    int y_max = -1;
+    int i;
+    for(i = 0; i < size; i++){
+        if(idx != -1 && vetPointsClusterIdx[i] != idx) continue;
+        if(x_min == -1 || measurement[i][0] < x_min) x_min = measurement[i][0];
+        if(y_min == -1 || measurement[i][1] < y_min) y_min = measurement[i][1];
+        if(x_max == -1 || measurement[i][0] > x_max) x_max = measurement[i][0];
+        if(y_max == -1 || measurement[i][1] > y_max) y_max = measurement[i][1];
     }
     return cvRect(x_min, y_min, x_max-x_min, y_max-y_min);
 }

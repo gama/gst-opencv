@@ -43,7 +43,7 @@ float distRectToPoint(CvRect rect, CvPoint point){
     return (float)sqrt(pow(((rect.x+(rect.width/2)) - point.x), 2) + pow(((rect.y+(rect.height/2)) - point.y), 2));
 }
 
-int pointIntoDect(CvRect rect, CvPoint point){
+int pointIntoRect(CvRect rect, CvPoint point){
     if(point.x < rect.x || point.x > (rect.x+rect.width) || point.y < rect.y || point.y > (rect.y+rect.height)) return 0;
     else return 1;
 }
