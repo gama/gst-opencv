@@ -51,6 +51,7 @@
 #include <highgui.h>
 #include <cvaux.h>
 
+#define MIN_AREA_MOTION_CONSIDERED (40*40)
 
 G_BEGIN_DECLS
 /* #defines don't like whitespacey bits */
@@ -82,6 +83,7 @@ struct _GstTracker
 
     // filter parameter
     gboolean verbose;
+    gboolean tracker_by_motion;
     gboolean show_particles;
     gboolean show_features;
     gboolean show_features_box;

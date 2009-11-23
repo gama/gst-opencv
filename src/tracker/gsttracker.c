@@ -67,6 +67,7 @@
 #include "gsttracker.h"
 #include "condensation.h"
 #include "identifier.h"
+#include "../facemetrix/identifier_motion.h"
 
 GST_DEBUG_CATEGORY_STATIC(gst_tracker_debug);
 #define GST_CAT_DEFAULT gst_tracker_debug
@@ -110,7 +111,8 @@ enum {
     PROP_SHOW_FEATURES_BOX,
     PROP_SHOW_BORDERS,
     PROP_SAMPLE_SIZE,
-    PROP_FRAMES_LEARN_BG
+    PROP_FRAMES_LEARN_BG,
+    PROP_TRACKER_BY_MOTION
 };
 
 /* the capabilities of the inputs and outputs.
@@ -190,6 +192,10 @@ gst_tracker_class_init(GstTrackerClass * klass)
     gobject_class->set_property = gst_tracker_set_property;
     gobject_class->get_property = gst_tracker_get_property;
 
+    g_object_class_install_property(gobject_class, PROP_TRACKER_BY_MOTION,
+                                    g_param_spec_boolean("tracker-by-motion", "T racker by motion", "Amendment application to track moving object, instead of subtracting background.",
+                                                         FALSE, G_PARAM_READWRITE));
+
     g_object_class_install_property(gobject_class, PROP_VERBOSE,
                                     g_param_spec_boolean("verbose", "Verbose", "Sets whether the movement direction should be printed to the standard output.",
                                                          FALSE, G_PARAM_READWRITE));
@@ -259,6 +265,7 @@ gst_tracker_init(GstTracker * filter, GstTrackerClass * gclass)
     gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
 
     // set default properties
+    filter->tracker_by_motion  = FALSE;
     filter->verbose            = FALSE;
     filter->show_particles     = FALSE;
     filter->show_features      = FALSE;
@@ -295,6 +302,9 @@ gst_tracker_set_property(GObject *object, guint prop_id,
     GstTracker *filter = GST_TRACKER(object);
 
     switch (prop_id) {
+        case PROP_TRACKER_BY_MOTION:
+            filter->tracker_by_motion = g_value_get_boolean(value);
+            break;
         case PROP_VERBOSE:
             filter->verbose = g_value_get_boolean(value);
             break;
@@ -328,7 +338,6 @@ gst_tracker_set_property(GObject *object, guint prop_id,
          case PROP_FRAMES_LEARN_BG:
             filter->nframesToLearnBG = g_value_get_uint(value);
             break;
- 
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
             break;
@@ -342,6 +351,9 @@ gst_tracker_get_property(GObject * object, guint prop_id,
     GstTracker *filter = GST_TRACKER(object);
 
     switch (prop_id) {
+        case PROP_TRACKER_BY_MOTION:
+            g_value_set_boolean(value, filter->tracker_by_motion);
+            break;
         case PROP_VERBOSE:
             g_value_set_boolean(value, filter->verbose);
             break;
@@ -375,7 +387,6 @@ gst_tracker_get_property(GObject * object, guint prop_id,
          case PROP_FRAMES_LEARN_BG:
             g_value_set_uint(value, filter->nframesToLearnBG);
             break;
- 
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
             break;
@@ -439,88 +450,91 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
 
 
-    if (filter->framesProcessed <= filter->nframesToLearnBG){
+    // If use background, do trainning
+    if(!filter->tracker_by_motion){
 
         // Background update
-        cvCvtColor( filter->image, filter->background, CV_BGR2YCrCb );
-        cvBGCodeBookUpdate( filter->backgroundModel, filter->background, cvRect(0,0,0,0), 0 );
-        filter->framesProcessed++;
+        if (filter->framesProcessed <= filter->nframesToLearnBG){
+            cvCvtColor( filter->image, filter->background, CV_BGR2YCrCb );
+            cvBGCodeBookUpdate( filter->backgroundModel, filter->background, cvRect(0,0,0,0), 0 );
+            filter->framesProcessed++;
 
-        gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
-        return gst_pad_push(filter->srcpad, buf);
+            gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
+            return gst_pad_push(filter->srcpad, buf);
+        }
+        else if (filter->framesProcessed == filter->nframesToLearnBG+1){
+            cvBGCodeBookClearStale( filter->backgroundModel, filter->backgroundModel->t/2, cvRect(0,0,0,0), 0 );
+        }
     }
-    else if (filter->framesProcessed == filter->nframesToLearnBG+1){
-        cvBGCodeBookClearStale( filter->backgroundModel, filter->backgroundModel->t/2, cvRect(0,0,0,0), 0 );
-    }
-    
 
-    CvRect particlesBoundary;
-    if (filter->initialized){
-        getParticlesBoundary(filter->ConDens, &particlesBoundary, filter->width_image, filter->height_image);
-    }
-    
+
     if (!filter->initialized || filter->count < filter->min_points) {
         
-        if (filter->background){
+        // automatic initialization
+        IplImage* eig       = cvCreateImage(cvGetSize(filter->grey), 32, 1);
+        IplImage* temp      = cvCreateImage(cvGetSize(filter->grey), 32, 1);
 
-            // automatic initialization
-            IplImage* eig       = cvCreateImage(cvGetSize(filter->grey), 32, 1);
-            IplImage* temp      = cvCreateImage(cvGetSize(filter->grey), 32, 1);
+        // Get ROI that defines the largest object found
+        CvRect rectRoi = (filter->tracker_by_motion)?
+            motion_detect(filter->image, filter->cvMotion):
+            segObjectBookBGDiff(filter->backgroundModel, filter->image, filter->background);
 
-            // Get ROI that defines the largest object found
-            CvRect rectRoi = segObjectBookBGDiff(filter->backgroundModel,
-                filter->image, filter->background);
+        // If tiny or full size, do discard
+        if((rectRoi.height * rectRoi.width) < MIN_AREA_MOTION_CONSIDERED ||
+            (rectRoi.height * rectRoi.width) == (filter->image->height * filter->image->width))
+            rectRoi.height = rectRoi.width = 0;
 
-            if (rectRoi.width != 0 && rectRoi.height != 0){
+        if (rectRoi.width != 0 && rectRoi.height != 0){
 
-                int i;
-                double quality      = 0.01;
-                double min_distance = 10;
+            int i;
+            double quality      = 0.01;
+            double min_distance = 10;
 
-                cvSetImageROI( filter->grey, rectRoi );
+            cvSetImageROI( filter->grey, rectRoi );
 
+            filter->count = filter->max_points;
+            filter->prev_avg_x = -1.0;
 
-                filter->count = filter->max_points;
-                filter->prev_avg_x = -1.0;
+            cvGoodFeaturesToTrack(filter->grey, eig, temp, filter->points[1], &(filter->count), quality,
+                                  min_distance, 0, 3, 0, 0.04);
 
-                cvGoodFeaturesToTrack(filter->grey, eig, temp, filter->points[1], &(filter->count), quality,
-                                      min_distance, 0, 3, 0, 0.04);
+            int win_size;
+            // image size must to be greater than filter->win_size*2+5 see /home/erickson/Desktop/OpenCV-2.0.0/src/cv/cvcornersubpix.cpp, line 92
+            if (rectRoi.width <= (filter->win_size*2+5) || rectRoi.height <= (filter->win_size*2+5)){
+                win_size = rectRoi.width < rectRoi.height ? rectRoi.width : rectRoi.height;
+                win_size = (win_size-5)/2;
 
-                int win_size;
-                // image size must to be greater than filter->win_size*2+5 see /home/erickson/Desktop/OpenCV-2.0.0/src/cv/cvcornersubpix.cpp, line 92
-                if (rectRoi.width <= (filter->win_size*2+5) || rectRoi.height <= (filter->win_size*2+5)){
-                    win_size = rectRoi.width < rectRoi.height ? rectRoi.width : rectRoi.height;
-                    win_size = (win_size-5)/2;
+            }else win_size = filter->win_size;
 
-                }else win_size = filter->win_size;
+            cvFindCornerSubPix(filter->grey, filter->points[1], filter->count, cvSize(win_size, win_size),
+                               cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03));
 
-                cvFindCornerSubPix(filter->grey, filter->points[1], filter->count, cvSize(win_size, win_size),
-                                   cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03));
-
-                // Displacement coordinates according ROI
-                for(i = 0; i < filter->count; i++){
-                    filter->points[1][i].x += rectRoi.x;
-                    filter->points[1][i].y += rectRoi.y;
-                }
-
-
-                cvResetImageROI( filter->grey );
-
-                if (filter->verbose){
-                    cvRectangle(filter->image,
-                        cvPoint(rectRoi.x, rectRoi.y),
-                        cvPoint(rectRoi.x+rectRoi.width, rectRoi.y+rectRoi.height),
-                        CV_RGB(255, 0, 255), 3, 0, 0 );
-                    printf(" reload...\n");
-                }
+            // Displacement coordinates according ROI
+            for(i = 0; i < filter->count; i++){
+                filter->points[1][i].x += rectRoi.x;
+                filter->points[1][i].y += rectRoi.y;
             }
 
-            cvReleaseImage(&eig);
-            cvReleaseImage(&temp);
-        }
-    } else {
-        int i, k;
+            cvResetImageROI( filter->grey );
 
+            if (filter->verbose){
+                cvRectangle(filter->image,
+                    cvPoint(rectRoi.x, rectRoi.y),
+                    cvPoint(rectRoi.x+rectRoi.width, rectRoi.y+rectRoi.height),
+                    CV_RGB(255, 0, 255), 3, 0, 0 );
+                printf(" reload...\n");
+            }
+
+            // Mark as initialized
+            filter->initialized = TRUE;
+        }
+
+        cvReleaseImage(&eig);
+        cvReleaseImage(&temp);
+
+    } else {
+
+        int i, k;
         cvCalcOpticalFlowPyrLK(filter->prev_grey, filter->grey, filter->prev_pyramid, filter->pyramid,
                                filter->points[0], filter->points[1], filter->count, cvSize(filter->win_size, filter->win_size),
                                3, filter->status, 0, cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03),
@@ -544,7 +558,11 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
 
         if (filter->show_features)
             cvCircle( filter->image, cvPoint(predicted_x, predicted_y), 3, CV_RGB(0,255,0), -1, 8,0);
- 
+
+        CvRect particlesBoundary;
+        getParticlesBoundary(filter->ConDens, &particlesBoundary,
+                filter->width_image, filter->height_image);
+
         for (i = k = 0; i < filter->count; ++i) {
             if (!filter->status[i])
                 continue;
@@ -574,6 +592,10 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
                 if(max.x < filter->points[1][i].x) max.x = filter->points[1][i].x;
                 if(max.y < filter->points[1][i].y) max.y = filter->points[1][i].y;
             }
+            if(min.x < 0) min.x = 0;
+            if(min.y < 0) min.y = 0;
+            if(max.x > filter->image->width) max.x = filter->image->width;
+            if(max.y > filter->image->height) max.y = filter->image->height;
             featuresBox = cvRect(min.x, min.y, max.x-min.x, max.y-min.y);
         }
 
@@ -601,12 +623,9 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
         fflush(stdout);
     }
     filter->prev_avg_x = avg_x;
-
     CV_SWAP(filter->prev_grey, filter->grey, swap_temp);
     CV_SWAP(filter->prev_pyramid, filter->pyramid, swap_temp);
     CV_SWAP(filter->points[0], filter->points[1], swap_points);
-
-    filter->initialized = TRUE;
 
     gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
     return gst_pad_push(filter->srcpad, buf);
