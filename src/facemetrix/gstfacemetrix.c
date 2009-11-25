@@ -101,15 +101,17 @@ enum {
     PROP_PROFILE,
     PROP_SGL_HOST,
     PROP_SGL_PORT,
+    PROP_SOURCE_ID,
     PROP_DEBUG
 };
 
 GST_DEBUG_CATEGORY_STATIC (gst_facemetrix_debug);
 #define GST_CAT_DEFAULT gst_facemetrix_debug
 
-#define DEFAULT_PROFILE  "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml"
-#define DEFAULT_SGL_HOST "localhost"
-#define DEFAULT_SGL_PORT 1500
+#define DEFAULT_PROFILE   "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml"
+#define DEFAULT_SGL_HOST  "localhost"
+#define DEFAULT_SGL_PORT  1500
+#define DEFAULT_SOURCE_ID "gstfacemetrix"
 
 //#define MAX_NFACES 10
 #define MIN_FACE_NEIGHBORS 5    //2~5
@@ -228,6 +230,11 @@ gst_facemetrix_class_init(GstFacemetrixClass *klass)
                                                       "TCP port used by the SGL server",
                                                       0, USHRT_MAX, DEFAULT_SGL_PORT, G_PARAM_READWRITE));
 
+    g_object_class_install_property(gobject_class, PROP_SOURCE_ID,
+                                    g_param_spec_string("source", "ID of the video source",
+                                                        "ID of the video source (camera, stream, etc). This will be forwarded to the facemetrix server to identify the face models associated with this video source",
+                                                        DEFAULT_SOURCE_ID, G_PARAM_READWRITE));
+
     g_object_class_install_property(gobject_class, PROP_DEBUG,
                                     g_param_spec_boolean("debug", "Debug",
                                                          "Save detected faces images to /tmp and prints debug-related info to stdout",
@@ -291,11 +298,12 @@ gst_facemetrix_init(GstFacemetrix *filter, GstFacemetrixClass *gclass)
     gst_element_add_pad(GST_ELEMENT (filter), filter->sinkpad);
     gst_element_add_pad(GST_ELEMENT (filter), filter->srcpad);
 
-    filter->profile = DEFAULT_PROFILE;
-    filter->display = TRUE;
-    filter->sglhost = DEFAULT_SGL_HOST;
-    filter->sglport = DEFAULT_SGL_PORT;
-    filter->sgl     = NULL;
+    filter->profile   = DEFAULT_PROFILE;
+    filter->display   = TRUE;
+    filter->sglhost   = DEFAULT_SGL_HOST;
+    filter->sglport   = DEFAULT_SGL_PORT;
+    filter->sgl       = NULL;
+    filter->sourceid  = DEFAULT_SOURCE_ID;
     filter->debug     = FALSE;
     filter->image_idx = 0;
 
@@ -339,6 +347,9 @@ gst_facemetrix_set_property(GObject *object, guint prop_id, const GValue *value,
             break;
         case PROP_SGL_PORT:
             filter->sglport = g_value_get_uint(value);
+            break;
+        case PROP_SOURCE_ID:
+            filter->sourceid = g_value_dup_string(value);
             break;
         case PROP_DEBUG:
             filter->debug = g_value_get_boolean(value);
@@ -396,6 +407,9 @@ gst_facemetrix_get_property (GObject *object, guint prop_id, GValue *value, GPar
             break;
         case PROP_SGL_PORT:
             g_value_set_uint(value, filter->sglport);
+            break;
+        case PROP_SOURCE_ID:
+            g_value_set_string(value, filter->sourceid);
             break;
         case PROP_DEBUG:
             g_value_set_boolean(value, filter->debug);
@@ -590,7 +604,8 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
                         cvDecRefData(&face);
                         break;
                     }
-                    if ((id = sgl_client_recognize(filter->sgl, FALSE, (gchar*) jpegface->data.ptr, jpegface->rows * jpegface->step)) == NULL) {
+                    if ((id = sgl_client_recognize(filter->sgl, filter->sourceid, FALSE, (gchar*) jpegface->data.ptr,
+                                                   jpegface->rows * jpegface->step, NULL, NULL, NULL, NULL)) == NULL) {
                         GST_WARNING("[sgl] unable to get user id");
                     } else if (filter->debug) {
                         g_print("[sgl] id: %s\n", id);

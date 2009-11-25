@@ -20,9 +20,10 @@
 
 #include "sglclient.h"
 
-#include <gnet.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <gnet.h>
 
 #define SGL_USERNAME                 "vetta"
 #define SGL_PASSWORD                 "vetta"
@@ -36,11 +37,15 @@
 #define SGL_USER_LIST_REQUEST        "#list_users#"
 #define SGL_USER_LIST_RESPONSE       "#list_users_response"
 
-#define SGL_RECOGNIZE_REQUEST        "#recognize reqid %d userid nobody timestamp %s detect %s photo %s#"
-#define SGL_RECOGNIZE_RESPONSE_OK    "#recognize_response reqid %d userid "
+#define SGL_RECOGNIZE_REQUEST        "#recognize reqid %d userid nobody sourceid %s timestamp %s detect %s photo %s#"
+#define SGL_RECOGNIZE_RESPONSE       "#recognize_response reqid %d userid "
+#define SGL_RECOGNIZE_RESPONSE_FACE_COOR_PARAM "face_coordinates"
 
-#define SGL_STORE_REQUEST            "#store reqid %d userid %s timestamp %s photo %s#"
+#define SGL_STORE_REQUEST            "#store reqid %d userid %s sourceid %s timestamp %s photo %s#"
 #define SGL_STORE_RESPONSE_OK        "#ok store reqid %d#"
+
+#define SGL_REFERENCE_IMAGE_REQUEST  "#reference_image userid %s#"
+#define SGL_REFERENCE_IMAGE_RESPONSE "#reference_image_response photo "
 
 #define SGL_TIMESTAMP_FORMAT         "%H:%M:%S-%d/%m/%Y"
 #define SGL_TIMESTAMP_EXAMPLE        "HH:MM:SS-DD/MM/YYYY"
@@ -159,7 +164,7 @@ sgl_client_list_users (SglClient *client)
     g_return_val_if_fail(priv->socket    != NULL, FALSE);
     g_return_val_if_fail(priv->iochannel != NULL, FALSE);
 
-    // build open_session request string and send it
+    // build list_users request string and send it
     request_length = strlen(SGL_USER_LIST_REQUEST);
     error = gnet_io_channel_writen(priv->iochannel, SGL_USER_LIST_REQUEST, request_length, &bytes_written);
     if ((error != G_IO_ERROR_NONE) || (request_length != bytes_written)) {
@@ -167,7 +172,7 @@ sgl_client_list_users (SglClient *client)
         return NULL;
     }
 
-    // read and parse open_session response
+    // read and parse list_users response
     error = gnet_read_sgl_command_dup(priv->iochannel, &response, &response_length);
     if (error != G_IO_ERROR_NONE) {
         g_warning("unable to get 'list_users' response: %d (%s)", error, g_strerror(errno));
@@ -188,7 +193,8 @@ sgl_client_list_users (SglClient *client)
 }
 
 gchar*
-sgl_client_recognize(SglClient *client, const gboolean detect, const gchar* data, const guint length)
+sgl_client_recognize(SglClient *client, const gchar *sourceid, const gboolean detect, const gchar* data,
+                     const guint length, guint *x1, guint *y1, guint *x2, guint *y2)
 {
     gchar *request, *response, *expected_recognize_response;
     gchar *base64_data, *timestamp, *id, *id_start, *id_end;
@@ -201,13 +207,19 @@ sgl_client_recognize(SglClient *client, const gboolean detect, const gchar* data
     g_return_val_if_fail(priv->socket    != NULL, FALSE);
     g_return_val_if_fail(priv->iochannel != NULL, FALSE);
     g_return_val_if_fail(data            != NULL, FALSE);
+    if (detect == TRUE) {
+        g_return_val_if_fail(x1 != NULL, FALSE);
+        g_return_val_if_fail(y1 != NULL, FALSE);
+        g_return_val_if_fail(x2 != NULL, FALSE);
+        g_return_val_if_fail(y2 != NULL, FALSE);
+    }
 
     // convert data to base64 format
     base64_data = g_base64_encode((const guchar*) data, length);
 
     // build request string and send it
     timestamp = build_timestamp();
-    request = g_strdup_printf(SGL_RECOGNIZE_REQUEST, ++priv->reqid, timestamp, detect ? "Y" : "N", base64_data);
+    request = g_strdup_printf(SGL_RECOGNIZE_REQUEST, ++priv->reqid, sourceid, timestamp, detect ? "Y" : "N", base64_data);
     request_length = strlen(request);
     g_free(base64_data);
     g_free(timestamp);
@@ -225,7 +237,7 @@ sgl_client_recognize(SglClient *client, const gboolean detect, const gchar* data
         g_warning("unable to get 'recognize' response: %d (%s)", error, g_strerror(errno));
         return FALSE;
     }
-    expected_recognize_response = g_strdup_printf(SGL_RECOGNIZE_RESPONSE_OK, priv->reqid);
+    expected_recognize_response = g_strdup_printf(SGL_RECOGNIZE_RESPONSE, priv->reqid);
     if ((g_str_has_prefix(response, expected_recognize_response) == FALSE) ||
         (g_str_has_suffix(response, "#") == FALSE)) {
         g_warning("unable to parse 'recognize' response: (%s)", response);
@@ -236,7 +248,19 @@ sgl_client_recognize(SglClient *client, const gboolean detect, const gchar* data
 
     // extract userid from the response
     id_start = response + strlen(expected_recognize_response);
-    id_end   = &response[response_length - 1];
+    id_end   = index(id_start, ' ');
+    if (id_end == NULL) {
+        id_end = &response[response_length - 1];
+    } else if (detect) {
+        gchar **coords = g_strsplit(id_end + 1, " ", -1);
+        if ((g_strv_length(coords) == 5) && (strcmp(coords[0], SGL_RECOGNIZE_RESPONSE_FACE_COOR_PARAM) == 0)) {
+            *x1 = strtol(coords[1], NULL, 0);
+            *y1 = strtol(coords[2], NULL, 0);
+            *x2 = strtol(coords[3], NULL, 0);
+            *y2 = strtol(coords[4], NULL, 0);
+        } else g_warning("invalid 'face coordinates' request parameters: '%s'", id_end);
+        g_strfreev(coords);
+    }
     id = g_strndup(id_start, id_end - id_start);
 
     g_free(expected_recognize_response);
@@ -246,9 +270,9 @@ sgl_client_recognize(SglClient *client, const gboolean detect, const gchar* data
 }
 
 gboolean
-sgl_client_store(SglClient *client, const gchar *userid, const gchar* data, const guint length)
+sgl_client_store(SglClient *client, const gchar *userid, const gchar *sourceid, const gchar* data, const guint length)
 {
-    gchar *request, *response, *expected_recognize_response, *base64_data, *timestamp;
+    gchar *request, *response, *expected_store_response, *base64_data, *timestamp;
     gsize request_length, response_length, bytes_written;
     GIOError error = G_IO_ERROR_NONE;
     SglClientPrivate *priv = SGL_CLIENT_GET_PRIVATE(client);
@@ -264,7 +288,7 @@ sgl_client_store(SglClient *client, const gchar *userid, const gchar* data, cons
 
     // build request string and send it
     timestamp = build_timestamp();
-    request = g_strdup_printf(SGL_STORE_REQUEST, ++priv->reqid, userid, timestamp, base64_data);
+    request = g_strdup_printf(SGL_STORE_REQUEST, ++priv->reqid, userid, sourceid, timestamp, base64_data);
     request_length = strlen(request);
     g_free(base64_data);
     g_free(timestamp);
@@ -282,18 +306,65 @@ sgl_client_store(SglClient *client, const gchar *userid, const gchar* data, cons
         g_warning("unable to get 'store' response: %d (%s)", error, g_strerror(errno));
         return FALSE;
     }
-    expected_recognize_response = g_strdup_printf(SGL_STORE_RESPONSE_OK, priv->reqid);
-    if ((g_str_has_prefix(response, expected_recognize_response) == FALSE) ||
+    expected_store_response = g_strdup_printf(SGL_STORE_RESPONSE_OK, priv->reqid);
+    if ((g_str_has_prefix(response, expected_store_response) == FALSE) ||
         (g_str_has_suffix(response, "#") == FALSE)) {
         g_warning("unable to parse 'store' response: (%s)", response);
-        g_free(expected_recognize_response);
+        g_free(expected_store_response);
         g_free(response);
         return FALSE;
     }
-    g_free(expected_recognize_response);
+    g_free(expected_store_response);
     g_free(response);
 
     return TRUE;
+}
+
+void
+sgl_client_reference_image (SglClient *client, const gchar *id, gchar** data, gsize* length)
+{
+    gchar *request, *response, *data_start, *data_end, *base64_data;
+    gsize request_length, response_length, bytes_written;
+    GIOError error = G_IO_ERROR_NONE;
+    SglClientPrivate *priv = SGL_CLIENT_GET_PRIVATE(client);
+
+    // sanity checks
+    g_return_if_fail(client          != NULL);
+    g_return_if_fail(priv->socket    != NULL);
+    g_return_if_fail(priv->iochannel != NULL);
+
+    // build reference_image request string and send it
+    request = g_strdup_printf(SGL_REFERENCE_IMAGE_REQUEST, id);
+    request_length = strlen(request);
+    error = gnet_io_channel_writen(priv->iochannel, request, request_length, &bytes_written);
+    if ((error != G_IO_ERROR_NONE) || (request_length != bytes_written)) {
+        g_warning("unable to send 'reference_image' request: %d (%s)", error, g_strerror(errno));
+        return;
+    }
+    g_free(request);
+
+    // read and parse open_session response
+    error = gnet_read_sgl_command_dup(priv->iochannel, &response, &response_length);
+    if (error != G_IO_ERROR_NONE) {
+        g_warning("unable to get 'recognize_image' response: %d (%s)", error, g_strerror(errno));
+        g_free(response);
+        return;
+    }
+    if ((g_str_has_prefix(response, SGL_REFERENCE_IMAGE_RESPONSE) == FALSE) ||
+        (g_str_has_suffix(response, "#") == FALSE)) {
+        g_warning("unable to parse 'reference_image' response: (%s)", response);
+        g_free(response);
+        return;
+    }
+
+    data_start    = response + strlen(SGL_REFERENCE_IMAGE_RESPONSE);
+    data_end      = &response[response_length - 1];
+    base64_data = g_strndup(data_start, data_end - data_start);
+    g_free(response);
+
+    // convert image data from base64 format
+    *data = (gchar*) g_base64_decode(base64_data, length);
+    g_free(base64_data);
 }
 
 // adapted from gnet_iochannel_readline_strdup

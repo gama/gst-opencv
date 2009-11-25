@@ -43,14 +43,26 @@ void     sgl_client_close      (SglClient      *client);
 gchar**  sgl_client_list_users (SglClient      *client);
 
 gchar*   sgl_client_recognize  (SglClient      *client,
+                                const gchar    *sourceid,
                                 const gboolean  detect,
+                                const gchar    *data,
+                                const guint     length,
+                                guint          *x1,
+                                guint          *y1,
+                                guint          *x2,
+                                guint          *y2);
+
+gboolean sgl_client_store      (SglClient      *client,
+                                const gchar    *userid,
+                                const gchar    *sourceid,
                                 const gchar    *data,
                                 const guint     length);
 
-gboolean sgl_client_store      (SglClient      *client,
-                                const gchar    *id,
-                                const gchar    *data,
-                                const guint     length);
+void     sgl_client_reference_image (SglClient   *client,
+                                     const gchar *id,
+                                     gchar      **data,
+                                     gsize       *length);
+
 G_END_DECLS
 
 #endif

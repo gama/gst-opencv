@@ -105,6 +105,7 @@ struct _GstFacemetrix
     SglClient               *sgl;
     gchar                   *sglhost;
     guint                    sglport;
+    gchar                   *sourceid;
     guint                    image_idx;
 
     // tracker
