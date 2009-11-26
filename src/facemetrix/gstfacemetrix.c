@@ -154,13 +154,17 @@ gst_facemetrix_finalize (GObject * obj)
     if (filter->cvImage) {
         cvReleaseImage (&filter->cvImage);
         cvReleaseImage (&filter->cvGray);
-	cvReleaseImage (&filter->cvMotion);
+        cvReleaseImage (&filter->cvMotion);
     }
     if (filter->sgl != NULL) {
         sgl_client_close(filter->sgl);
         g_object_unref(filter->sgl);
         filter->sgl = NULL;
     }
+
+    if (filter->profile)     g_free(filter->profile);
+    if (filter->sglhost)     g_free(filter->sglhost);
+    if (filter->sourceid)    g_free(filter->sourceid);
 
     // Tracker code
     if (filter->image)        cvReleaseImage(&filter->image);
