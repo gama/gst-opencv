@@ -157,6 +157,7 @@ AC_OUTPUT([
     src/facedetect/Makefile
     src/facemetrix/Makefile
     src/lkopticalflow/Makefile
+    src/motiontemplate/Makefile
     src/pyramidsegment/Makefile
     src/templatematch/Makefile
     src/tracker/Makefile
