@@ -45,7 +45,6 @@
 
 #include <cxtypes.h>
 
-
 /**
  * SECTION:element-facemetrix
  *
@@ -70,6 +69,7 @@
 #include "draw.h"
 */
 #include "gstfacemetrix.h"
+#include <sys/time.h>
 
 // transition matrix F describes model parameters at and k and k+1
 static const float F[] = { 1, 1, 0, 1 };
@@ -83,6 +83,17 @@ static const float F[] = { 1, 1, 0, 1 };
 #define DEFAULT_MEASUREMENT_DIM     4
 #define DEFAULT_SAMPLE_SIZE         50
 #define DEFAULT_MAX_SAMPLE_SIZE     10*DEFAULT_SAMPLE_SIZE
+#define MIN_FACE_NEIGHBORS          5    //2~5
+#define MIN_FACEBOX_SIDE            20
+//#define MAX_NFACES                10
+
+#define DEFAULT_PROFILE             "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml"
+#define DEFAULT_SGL_HOST            "localhost"
+#define DEFAULT_SGL_PORT            1500
+#define DEFAULT_SOURCE              "gstfacemetrix"
+
+#define TIMESTAMP_FORMAT            "%H:%M:%S-%d/%m/%Y"
+#define TIMESTAMP_EXAMPLE           "HH:MM:SS-DD/MM/YYYY"
 
 enum {
     PROP_0,
@@ -101,21 +112,13 @@ enum {
     PROP_PROFILE,
     PROP_SGL_HOST,
     PROP_SGL_PORT,
-    PROP_SOURCE_ID,
-    PROP_DEBUG
+    PROP_SOURCE,
+    PROP_SAVE_FACES,
+    PROP_SAVE_PREFIX
 };
 
 GST_DEBUG_CATEGORY_STATIC (gst_facemetrix_debug);
 #define GST_CAT_DEFAULT gst_facemetrix_debug
-
-#define DEFAULT_PROFILE   "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml"
-#define DEFAULT_SGL_HOST  "localhost"
-#define DEFAULT_SGL_PORT  1500
-#define DEFAULT_SOURCE_ID "gstfacemetrix"
-
-//#define MAX_NFACES 10
-#define MIN_FACE_NEIGHBORS 5    //2~5
-#define MIN_FACEBOX_SIDE 20
 
 // Filter signals and args
 enum
@@ -143,7 +146,7 @@ static void          gst_facemetrix_get_property (GObject * object, guint prop_i
 static gboolean      gst_facemetrix_set_caps     (GstPad * pad, GstCaps * caps);
 static GstFlowReturn gst_facemetrix_chain        (GstPad * pad, GstBuffer * buf);
 static void          gst_facemetrix_load_profile (GstFacemetrix * filter);
-
+static gchar*        build_timestamp             ();
 
 // clean up
 static void
@@ -163,8 +166,9 @@ gst_facemetrix_finalize (GObject * obj)
     }
 
     if (filter->profile)     g_free(filter->profile);
-    if (filter->sglhost)     g_free(filter->sglhost);
-    if (filter->sourceid)    g_free(filter->sourceid);
+    if (filter->sgl_host)    g_free(filter->sgl_host);
+    if (filter->source)      g_free(filter->source);
+    if (filter->save_prefix) g_free(filter->save_prefix);
 
     // Tracker code
     if (filter->image)        cvReleaseImage(&filter->image);
@@ -234,15 +238,20 @@ gst_facemetrix_class_init(GstFacemetrixClass *klass)
                                                       "TCP port used by the SGL server",
                                                       0, USHRT_MAX, DEFAULT_SGL_PORT, G_PARAM_READWRITE));
 
-    g_object_class_install_property(gobject_class, PROP_SOURCE_ID,
+    g_object_class_install_property(gobject_class, PROP_SOURCE,
                                     g_param_spec_string("source", "ID of the video source",
                                                         "ID of the video source (camera, stream, etc). This will be forwarded to the facemetrix server to identify the face models associated with this video source",
-                                                        DEFAULT_SOURCE_ID, G_PARAM_READWRITE));
+                                                        DEFAULT_SOURCE, G_PARAM_READWRITE));
 
-    g_object_class_install_property(gobject_class, PROP_DEBUG,
-                                    g_param_spec_boolean("debug", "Debug",
-                                                         "Save detected faces images to /tmp and prints debug-related info to stdout",
+    g_object_class_install_property(gobject_class, PROP_SAVE_FACES,
+                                    g_param_spec_boolean("save-faces", "Save detected faces",
+                                                         "Save detected faces as JPEG images",
                                                          FALSE, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_SAVE_PREFIX,
+                                    g_param_spec_string("save-prefix", "Filename prefix of the saved images",
+                                                        "Use the given prefix to define the name of the files with the detected faces. The full file paths will be '<save-prefix>_<source>_<timestamp>.jpg'",
+                                                        "/tmp/facemetrix", G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_VERBOSE,
                                     g_param_spec_boolean("verbose", "Verbose", "Sets whether the movement direction should be printed to the standard output.",
@@ -302,14 +311,15 @@ gst_facemetrix_init(GstFacemetrix *filter, GstFacemetrixClass *gclass)
     gst_element_add_pad(GST_ELEMENT (filter), filter->sinkpad);
     gst_element_add_pad(GST_ELEMENT (filter), filter->srcpad);
 
-    filter->profile   = DEFAULT_PROFILE;
-    filter->display   = TRUE;
-    filter->sglhost   = DEFAULT_SGL_HOST;
-    filter->sglport   = DEFAULT_SGL_PORT;
-    filter->sgl       = NULL;
-    filter->sourceid  = DEFAULT_SOURCE_ID;
-    filter->debug     = FALSE;
-    filter->image_idx = 0;
+    filter->profile     = g_strdup(DEFAULT_PROFILE);
+    filter->display     = TRUE;
+    filter->sgl_host    = g_strdup(DEFAULT_SGL_HOST);
+    filter->sgl_port    = DEFAULT_SGL_PORT;
+    filter->sgl         = NULL;
+    filter->source      = g_strdup(DEFAULT_SOURCE);
+    filter->image_idx   = 0;
+    filter->save_faces  = FALSE;
+    filter->save_prefix = g_strdup_printf("%s" G_DIR_SEPARATOR_S "facemetrix", g_get_tmp_dir());
 
     // tracker
     filter->verbose            = TRUE;
@@ -347,16 +357,19 @@ gst_facemetrix_set_property(GObject *object, guint prop_id, const GValue *value,
             filter->display = g_value_get_boolean(value);
             break;
         case PROP_SGL_HOST:
-            filter->sglhost = g_value_dup_string(value);
+            filter->sgl_host = g_value_dup_string(value);
             break;
         case PROP_SGL_PORT:
-            filter->sglport = g_value_get_uint(value);
+            filter->sgl_port = g_value_get_uint(value);
             break;
-        case PROP_SOURCE_ID:
-            filter->sourceid = g_value_dup_string(value);
+        case PROP_SOURCE:
+            filter->source = g_value_dup_string(value);
             break;
-        case PROP_DEBUG:
-            filter->debug = g_value_get_boolean(value);
+        case PROP_SAVE_FACES:
+            filter->save_faces = g_value_get_boolean(value);
+            break;
+        case PROP_SAVE_PREFIX:
+            filter->save_prefix = g_value_dup_string(value);
             break;
         case PROP_VERBOSE:
             filter->verbose = g_value_get_boolean(value);
@@ -407,16 +420,19 @@ gst_facemetrix_get_property (GObject *object, guint prop_id, GValue *value, GPar
             g_value_set_boolean(value, filter->display);
             break;
         case PROP_SGL_HOST:
-            g_value_set_string(value, filter->sglhost);
+            g_value_set_string(value, filter->sgl_host);
             break;
         case PROP_SGL_PORT:
-            g_value_set_uint(value, filter->sglport);
+            g_value_set_uint(value, filter->sgl_port);
             break;
-        case PROP_SOURCE_ID:
-            g_value_set_string(value, filter->sourceid);
+        case PROP_SOURCE:
+            g_value_set_string(value, filter->source);
             break;
-        case PROP_DEBUG:
-            g_value_set_boolean(value, filter->debug);
+        case PROP_SAVE_FACES:
+            g_value_set_boolean(value, filter->save_faces);
+            break;
+        case PROP_SAVE_PREFIX:
+            g_value_set_string(value, filter->save_prefix);
             break;
         case PROP_VERBOSE:
             g_value_set_boolean(value, filter->verbose);
@@ -478,8 +494,8 @@ gst_facemetrix_set_caps (GstPad * pad, GstCaps * caps)
     if ((filter->sgl = g_object_new(SGL_CLIENT_TYPE, NULL)) == NULL) {
         GST_WARNING("unable to create sgl client instance");
     } else {
-        if (sgl_client_open(filter->sgl, filter->sglhost, filter->sglport) == FALSE) {
-            GST_WARNING("unable to connect to sgl server (%s:%u)", filter->sglhost, filter->sglport);
+        if (sgl_client_open(filter->sgl, filter->sgl_host, filter->sgl_port) == FALSE) {
+            GST_WARNING("unable to connect to sgl server (%s:%u)", filter->sgl_host, filter->sgl_port);
             g_object_unref(filter->sgl);
             filter->sgl = NULL;
         }
@@ -582,11 +598,11 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
                     break;
                 }
 
-                if (filter->debug) {
+                if (filter->save_faces) {
                     gchar *filename, *timestamp;
 
                     timestamp = build_timestamp();
-                    filename = g_strdup_printf("/tmp/facemetrix_image_%05d_%04d.jpg", getpid(), ++filter->image_idx);
+                    filename = g_strdup_printf("%s_%s_%s.jpg", filter->save_prefix, filter->source, timestamp);
 
                     if (cvSaveImage(filename, &face, 0) == FALSE)
                         GST_ERROR("unable to save detected face image to file '%s'", filename);
@@ -618,12 +634,11 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
                         cvDecRefData(&face);
                         break;
                     }
-                    if ((id = sgl_client_recognize(filter->sgl, filter->sourceid, FALSE, (gchar*) jpegface->data.ptr,
-                                                   jpegface->rows * jpegface->step, NULL, NULL, NULL, NULL)) == NULL) {
+                    if ((id = sgl_client_recognize(filter->sgl, filter->source, FALSE, (gchar*) jpegface->data.ptr,
+                                                   jpegface->rows * jpegface->step, NULL, NULL, NULL, NULL)) == NULL)
                         GST_WARNING("[sgl] unable to get user id");
-                    } else if (filter->debug) {
+                    else if (filter->verbose)
                         g_print("[sgl] id: %s\n", id);
-                    }
 
                     cvReleaseMat(&jpegface);
                 }
@@ -871,6 +886,14 @@ gst_facemetrix_load_profile (GstFacemetrix * filter)
     if (!filter->cvCascade) {
         GST_WARNING("Couldn't load Haar classifier cascade: %s.", filter->profile);
     }
+}
+
+static
+gchar* build_timestamp()
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return g_strdup_printf("%ld%ld", tv.tv_sec, tv.tv_usec / 1000);
 }
 
 // entry point to initialize the plug-in

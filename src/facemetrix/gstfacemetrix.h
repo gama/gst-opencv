@@ -92,9 +92,10 @@ struct _GstFacemetrix
 
     GstPad                  *sinkpad;
     GstPad                  *srcpad;
-    gboolean                 debug;
     gboolean                 display;
     gchar                   *profile;
+    gboolean                 save_faces;
+    gchar                   *save_prefix;
 
     IplImage                *cvImage;
     IplImage                *cvGray;
@@ -103,9 +104,9 @@ struct _GstFacemetrix
     CvMemStorage            *cvStorage;
 
     SglClient               *sgl;
-    gchar                   *sglhost;
-    guint                    sglport;
-    gchar                   *sourceid;
+    gchar                   *sgl_host;
+    guint                    sgl_port;
+    gchar                   *source;
     guint                    image_idx;
 
     // tracker
