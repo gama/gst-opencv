@@ -1,4 +1,10 @@
+/*
+ * Copyright (C) 2009 Lucas Amorim <lucas@vettalabs.com>
+ * Copyright (C) 2009 Erickson Nascimento <erickson@vettalabs.com>
+ */
+
 #include "identifier_motion.h"
+#include <time.h>
 
 // various tracking parameters (in seconds)
 const double MHI_DURATION = 1;
@@ -8,6 +14,7 @@ const double MIN_PERC_PREENCHIMENTO_RECT = 0;//0.05;
 const double MIN_AREA_CONSIDERADA = 400;//0.05;
 
 #define MAX_MOTION_AREA 100
+#define DIFF_THRESHOLD 30
 
 // number of cyclic frame buffer used for motion detection
 // (should, probably, depend on FPS)

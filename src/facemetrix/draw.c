@@ -1,3 +1,8 @@
+/*
+ * Copyright (C) 2009 Lucas Amorim <lucas@vettalabs.com>
+ * Copyright (C) 2009 Erickson Nascimento <erickson@vettalabs.com>
+ */
+
 #include "draw.h"
 
 CvScalar colorIdx(int i){
@@ -5,12 +10,11 @@ CvScalar colorIdx(int i){
     return vet[i%6];
 }
 
-void pr(CvRect ob){printf("RECT\tx1=%i\ty1=%i\tx2=%i\ty2=%i\twidth=%i\theigth=%i\n",ob.x, ob.y, ob.x+ob.width, ob.y+ob.height, ob.width, ob.height);}
-void pp(CvPoint ob){printf("POINT\tx=%i\ty=%i\n",ob.x, ob.y);}
-void pi(int i){printf("INT\t%i\n",i);}
-void ps(int i){int j=0; while(j<i){printf("\n");++j;}}
-void pt(char *s){printf("%s\n",s);}
-
+void pr(CvRect ob){g_print("RECT\tx1=%i\ty1=%i\tx2=%i\ty2=%i\twidth=%i\theigth=%i\n",ob.x, ob.y, ob.x+ob.width, ob.y+ob.height, ob.width, ob.height);}
+void pp(CvPoint ob){g_print("POINT\tx=%i\ty=%i\n",ob.x, ob.y);}
+void pi(int i){g_print("INT\t%i\n",i);}
+void ps(int i){int j=0; while(j<i){g_print("\n");++j;}}
+void pt(char *s){g_print("%s\n",s);}
 
 void drawFaceIdentify(IplImage *dst, gchar *idFace, CvRect rectFace, CvScalar color, int drawRect){
 

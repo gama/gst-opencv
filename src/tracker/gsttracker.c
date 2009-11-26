@@ -61,13 +61,14 @@
 #  include <config.h>
 #endif
 
+#include "gsttracker.h"
+
 #include <glib/gprintf.h>
 #include <gst/gst.h>
+#include <identifier_motion.h>
+#include <condensation.h>
 
-#include "gsttracker.h"
-#include "condensation.h"
 #include "identifier.h"
-#include "../facemetrix/identifier_motion.h"
 
 GST_DEBUG_CATEGORY_STATIC(gst_tracker_debug);
 #define GST_CAT_DEFAULT gst_tracker_debug

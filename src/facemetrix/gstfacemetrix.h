@@ -49,17 +49,9 @@
 
 #include <gst/gst.h>
 #include <cv.h>
-#include <highgui.h>
 #include <cvaux.h>
-#include <unistd.h>
-#include <glib/gprintf.h>
 
-#include "draw.h"
-#include "kmeans.h"
 #include "sglclient.h"
-#include "identifier_motion.h"
-#include "../tracker/condensation.h"
-
 
 G_BEGIN_DECLS
 

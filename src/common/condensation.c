@@ -1,3 +1,8 @@
+/*
+ * Copyright (C) 2009 Lucas Amorim <lucas@vettalabs.com>
+ * Copyright (C) 2009 Erickson Nascimento <erickson@vettalabs.com>
+ */
+
 #include "condensation.h"
 
 void centroid(CvPoint2D32f *measurement, int size, double *x, double *y) {

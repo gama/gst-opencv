@@ -1,3 +1,8 @@
+/*
+ * Copyright (C) 2009 Lucas Amorim <lucas@vettalabs.com>
+ * Copyright (C) 2009 Erickson Nascimento <erickson@vettalabs.com>
+ */
+
 #include "identifier.h"
 
 CvRect onlyBiggerObject( IplImage* frameBW ){

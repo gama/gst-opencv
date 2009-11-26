@@ -1,30 +1,31 @@
 NULL =
 
-noinst_LTLIBRARIES = libgstmotiontemplate.la
+noinst_LTLIBRARIES = libgstcommon.la
 
 # sources used to compile this plug-in
-libgstmotiontemplate_la_SOURCES =						\
-	gstmotiontemplate.c									\
+libgstcommon_la_SOURCES =								\
+	condensation.c										\
+	identifier_motion.c									\
 	$(NULL)
 
 # flags used to compile this plugin
 # add other _CFLAGS and _LIBS as needed
-libgstmotiontemplate_la_CFLAGS =						\
+libgstcommon_la_CFLAGS  = 								\
 	$(GST_CFLAGS)										\
 	$(OPENCV_CFLAGS)									\
 	$(NULL)
 
-libgstmotiontemplate_la_LIBADD =						\
+libgstcommon_la_LIBADD  = 								\
 	$(GST_LIBS)											\
 	$(OPENCV_LIBS)										\
 	$(NULL)
 
-libgstmotiontemplate_la_LDFLAGS =						\
+libgstcommon_la_LDFLAGS =								\
 	$(GST_PLUGIN_LDFLAGS)								\
 	$(NULL)
 
 # headers we need but don't want installed
-noinst_HEADERS =										\
-	gstmotiontemplate.h									\
+noinst_HEADERS = 										\
+	condensation.h										\
+	identifier_motion.h									\
 	$(NULL)
-

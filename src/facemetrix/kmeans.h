@@ -1,16 +1,31 @@
-#ifndef _KMEANS_H
-#define	_KMEANS_H
+/*
+ * Copyright (C) 2009 Lucas Amorim <lucas@vettalabs.com>
+ * Copyright (C) 2009 Erickson Nascimento <erickson@vettalabs.com>
+ */
 
-#include "cv.h"
-#include "cvaux.h"
-#include "highgui.h"
-#include "cvtypes.h"
-#include "gstfacemetrix.h"
+#ifndef __GST_OPENCV_FACEMETRIX_KMEANS__
+#define __GST_OPENCV_FACEMETRIX_KMEANS__
 
-CvRect rectBoudingIdx(CvPoint2D32f *measurement, int size, int idx, int *vetPointsClusterIdx);
-CvRect floatRectBoudingIdx(float **measurement, int size, int idx, int *vetPointsClusterIdx);
-void doKmeans(int nClusters, int nPoints, CvPoint2D32f *vetPoints, int *vetPointsClusterIdx);
-void floatDoKmeans(int nClusters, int nPoints, float **vetPoints, int *vetPointsClusterIdx);
+#include <cv.h>
 
-#endif	/* _KMEANS_H */
+CvRect rectBoudingIdx      (CvPoint2D32f *measurement,
+                            int           size,
+                            int           idx,
+                            int          *vetPointsClusterIdx);
 
+CvRect floatRectBoudingIdx (float **measurement,
+                            int     size,
+                            int     idx,
+                            int    *vetPointsClusterIdx);
+
+void   doKmeans            (int           nClusters,
+                            int           nPoints,
+                            CvPoint2D32f *vetPoints,
+                            int          *vetPointsClusterIdx);
+
+void   floatDoKmeans       (int     nClusters,
+                            int     nPoints,
+                            float **vetPoints,
+                            int    *vetPointsClusterIdx);
+
+#endif // __GST_OPENCV_FACEMETRIX_KMEANS__

@@ -1,3 +1,8 @@
+/*
+ * Copyright (C) 2009 Lucas Amorim <lucas@vettalabs.com>
+ * Copyright (C) 2009 Erickson Nascimento <erickson@vettalabs.com>
+ */
+
 #include "kmeans.h"
 
 void floatDoKmeans(int nClusters, int nPoints, float **vetPoints, int *vetPointsClusterIdx){

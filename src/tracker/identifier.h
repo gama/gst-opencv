@@ -1,13 +1,23 @@
-#ifndef _IDENTIFIER_H_
-#define _IDENTIFIER_H_
+/*
+ * Copyright (C) 2009 Lucas Amorim <lucas@vettalabs.com>
+ * Copyright (C) 2009 Erickson Nascimento <erickson@vettalabs.com>
+ */
 
-#include "cv.h"
-#include "highgui.h"
-#include "cvaux.h"
-#include <stdio.h>
-#include <time.h>
+#ifndef __GST_OPENCV_TRACKER_IDENTIFIER___
+#define __GST_OPENCV_TRACKER_IDENTIFIER___
 
-CvRect segObjectBookBGDiff(CvBGCodeBookModel* model, IplImage* rawImage, IplImage* yuvImage);
-void showBorder( IplImage *srcGray, IplImage *dst, CvScalar borderColor, int edge_thresh, int smooth, int borderIncreaseSize );
+#include <cv.h>
+#include <cvaux.h>
 
-#endif
+CvRect segObjectBookBGDiff (CvBGCodeBookModel *model,
+                            IplImage          *rawImage,
+                            IplImage          *yuvImage);
+
+void   showBorder          (IplImage *srcGray,
+                            IplImage *dst,
+                            CvScalar  borderColor,
+                            int       edge_thresh,
+                            int       smooth,
+                            int       borderIncreaseSize);
+
+#endif // __GST_OPENCV_TRACKER_IDENTIFIER___

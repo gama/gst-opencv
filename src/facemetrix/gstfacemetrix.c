@@ -3,6 +3,8 @@
  * Copyright (C) 2005 Thomas Vander Stichele <thomas@apestaart.org>
  * Copyright (C) 2005 Ronald S. Bultje <rbultje@ronald.bitfreak.net>
  * Copyright (C) 2008 Michael Sheldon <mike@mikeasoft.com>
+ * Copyright (C) 2009 Lucas Amorim <lucas@vettalabs.com>
+ * Copyright (C) 2009 Erickson Nascimento <erickson@vettalabs.com>
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -43,7 +45,7 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#include <cxtypes.h>
+#include <highgui.h>
 
 /**
  * SECTION:element-facemetrix
@@ -59,6 +61,16 @@
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
+
+#include "gstfacemetrix.h"
+
+#include <identifier_motion.h>
+#include <condensation.h>
+
+#include "draw.h"
+#include "kmeans.h"
+#include "sglclient.h"
+
 
 /*
 #include <unistd.h>
@@ -179,7 +191,7 @@ gst_facemetrix_finalize (GObject * obj)
     if (filter->points[0])    cvFree(&filter->points[0]);
     if (filter->points[1])    cvFree(&filter->points[1]);
     if (filter->status)       cvFree(&filter->status);
-    if (filter->verbose)      g_printf("\n");
+    if (filter->verbose)      g_print("\n");
 
     // Multi tracker
     if (filter->points_cluster) cvFree(&filter->points_cluster);

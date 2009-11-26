@@ -1,14 +1,17 @@
-SUBDIRS = edgedetect        \
-          faceblur          \
-          facedetect        \
-          facemetrix        \
-          motiontemplate    \
-          lkopticalflow     \
-          pyramidsegment    \
-          templatematch     \
-          tracker       
+NULL =
 
-# plugindir is set in configure
+SUBDIRS =														\
+	common														\
+	edgedetect													\
+	faceblur													\
+	facedetect													\
+	facemetrix													\
+	motiontemplate												\
+	lkopticalflow												\
+	pyramidsegment												\
+	templatematch												\
+	tracker														\
+	$(NULL)
 
 plugin_LTLIBRARIES = libgstopencv.la
 
@@ -17,40 +20,51 @@ libgstopencv_la_SOURCES = gstopencv.c
 
 # flags used to compile this facedetect
 # add other _CFLAGS and _LIBS as needed
-libgstopencv_la_CFLAGS = $(GST_CFLAGS) $(OPENCV_CFLAGS)     \
-                         -I${top_srcdir}/src/edgedetect     \
-                         -I${top_srcdir}/src/faceblur       \
-                         -I${top_srcdir}/src/facedetect     \
-                         -I${top_srcdir}/src/facemetrix     \
-                         -I${top_srcdir}/src/motiontemplate \
-                         -I${top_srcdir}/src/lkopticalflow  \
-                         -I${top_srcdir}/src/pyramidsegment \
-                         -I${top_srcdir}/src/templatematch  \
-                         -I${top_srcdir}/src/tracker
+libgstopencv_la_CFLAGS =										\
+	-I${top_srcdir}/src/common									\
+	-I${top_srcdir}/src/edgedetect								\
+	-I${top_srcdir}/src/faceblur								\
+	-I${top_srcdir}/src/facedetect								\
+	-I${top_srcdir}/src/facemetrix								\
+	-I${top_srcdir}/src/motiontemplate							\
+	-I${top_srcdir}/src/lkopticalflow							\
+	-I${top_srcdir}/src/pyramidsegment							\
+	-I${top_srcdir}/src/templatematch							\
+	-I${top_srcdir}/src/tracker									\
+	$(GST_CFLAGS)												\
+	$(OPENCV_CFLAGS)											\
+	$(NULL)
 
 
-libgstopencv_la_LIBADD = $(GST_LIBS) $(OPENCV_LIBS)                                 \
-                         $(top_builddir)/src/edgedetect/libgstedgedetect.la         \
-                         $(top_builddir)/src/faceblur/libgstfaceblur.la             \
-                         $(top_builddir)/src/facedetect/libgstfacedetect.la         \
-                         $(top_builddir)/src/facemetrix/libgstfacemetrix.la         \
-                         $(top_builddir)/src/motiontemplate/libgstmotiontemplate.la \
-                         $(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la   \
-                         $(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la \
-                         $(top_builddir)/src/templatematch/libgsttemplatematch.la   \
-                         $(top_builddir)/src/tracker/libgsttracker.la
+libgstopencv_la_LIBADD =										\
+	$(top_builddir)/src/common/libgstcommon.la					\
+	$(top_builddir)/src/edgedetect/libgstedgedetect.la			\
+	$(top_builddir)/src/faceblur/libgstfaceblur.la				\
+	$(top_builddir)/src/facedetect/libgstfacedetect.la			\
+	$(top_builddir)/src/facemetrix/libgstfacemetrix.la			\
+	$(top_builddir)/src/motiontemplate/libgstmotiontemplate.la	\
+	$(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la	\
+	$(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la	\
+	$(top_builddir)/src/templatematch/libgsttemplatematch.la	\
+	$(top_builddir)/src/tracker/libgsttracker.la				\
+	$(GST_LIBS)													\
+	$(OPENCV_LIBS)												\
+	$(NULL)
 
 libgstopencv_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 
-libgstopencv_la_DEPENDENCIES = $(top_builddir)/src/edgedetect/libgstedgedetect.la           \
-                               $(top_builddir)/src/faceblur/libgstfaceblur.la               \
-                               $(top_builddir)/src/facedetect/libgstfacedetect.la           \
-                               $(top_builddir)/src/facemetrix/libgstfacemetrix.la           \
-                               $(top_builddir)/src/motiontemplate/libgstmotiontemplate.la   \
-                               $(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la     \
-                               $(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la   \
-                               $(top_builddir)/src/templatematch/libgsttemplatematch.la     \
-                               $(top_builddir)/src/tracker/libgsttracker.la
+libgstopencv_la_DEPENDENCIES =									\
+	$(top_builddir)/src/common/libgstcommon.la					\
+	$(top_builddir)/src/edgedetect/libgstedgedetect.la			\
+	$(top_builddir)/src/faceblur/libgstfaceblur.la				\
+	$(top_builddir)/src/facedetect/libgstfacedetect.la			\
+	$(top_builddir)/src/facemetrix/libgstfacemetrix.la			\
+	$(top_builddir)/src/motiontemplate/libgstmotiontemplate.la	\
+	$(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la	\
+	$(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la	\
+	$(top_builddir)/src/templatematch/libgsttemplatematch.la	\
+	$(top_builddir)/src/tracker/libgsttracker.la				\
+	$(NULL)
 
 # headers we need but don't want installed
 noinst_HEADERS = 
