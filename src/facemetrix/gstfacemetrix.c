@@ -526,7 +526,7 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
     cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
     
     // Detect frames rect motion
-    int i,j;
+    int i, j;
     CvSeq *motions = motion_detect_mult(filter->cvImage, filter->cvMotion);
     for (i = 0; i < motions->total; i++) {
 
@@ -563,23 +563,13 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
             cvResetImageROI(filter->cvGray);
 
             for (j = 0; j < (faces ? faces->total : 0); j++) {
-
+                int     m;
                 CvMat   face;
                 CvRect *rect = (CvRect*) cvGetSeqElem(faces, j);
 
-                // Absolut rectBox for this face
-                CvRect thisRectFace = cvRect(rect_motion.x+rect->x, rect_motion.y+rect->y, rect->width, rect->height);
-
-                // If already identify face in this rectFace, discard then...
-                int m;
-                int existFaceInThisFaceRect = 0;
-                for (m=0; m<filter->nFaces; ++m)
-                    if(rectIntercept(&thisRectFace, &filter->vet_faces[m].rect)){
-                        existFaceInThisFaceRect = 1;
-                        break;
-                    }
-                if(existFaceInThisFaceRect) continue;
-
+                // adjust rectangle coordinates due to ROI
+                rect->x += rect_motion.x;
+                rect->y += rect_motion.y;
 
                 cvGetSubRect(filter->cvImage, &face, *rect);
 
@@ -589,11 +579,31 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
                 }
 
                 if (filter->debug) {
-                    char   *filename;
+                    gchar *filename, *timestamp;
+
+                    timestamp = build_timestamp();
                     filename = g_strdup_printf("/tmp/facemetrix_image_%05d_%04d.jpg", getpid(), ++filter->image_idx);
-                    cvSaveImage(filename, &face, 0);
-                    g_print(">> face detected (saved as %s)\n", filename);
+
+                    if (cvSaveImage(filename, &face, 0) == FALSE)
+                        GST_ERROR("unable to save detected face image to file '%s'", filename);
+                    else if (filter->verbose)
+                        g_print(">> face detected (saved as %s)\n", filename);
+
+                    g_free(timestamp);
                     g_free(filename);
+                }
+
+                // if a face has already been recognized within the same region, skip
+                // the request to the facemetrix server
+                gboolean has_face = FALSE;
+                for (m = 0; m < filter->nFaces; ++m)
+                    if (rectIntercept(rect, &filter->vet_faces[m].rect)) {
+                        has_face = TRUE;
+                        break;
+                    }
+                if (has_face) {
+                    cvDecRefData(&face);
+                    continue;
                 }
 
                 if (filter->sgl != NULL) {
@@ -616,26 +626,26 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
 
                 cvDecRefData(&face);
 
-                // Draw first face box
-                drawFaceIdentify(filter->cvImage, id, thisRectFace, COLOR_GREEN, 1);
+                // draw first face box
+                drawFaceIdentify(filter->cvImage, id, *rect, COLOR_GREEN, 1);
 
-                // Storage if identified
-                if(filter->nFaces < MAX_NFACES && strcmp(id, SGL_UNKNOWN_FACE_ID) != 0){
-                    filter->vet_faces[filter->nFaces].rect = thisRectFace;
+                // save the face if it has been identified
+                if (filter->nFaces < MAX_NFACES && strcmp(id, SGL_UNKNOWN_FACE_ID) != 0) {
+                    filter->vet_faces[filter->nFaces].rect = *rect;
                     sprintf(filter->vet_faces[filter->nFaces].name, "%s", id);
                     filter->nFaces++;
 
-                    // Re-init the tracker
+                    // reset the tracker
                     filter->init = 0;
                 }
 
-            }// for faces
-        }// if cascade
-    }// for motions
+            } // for faces
+        } // if cascade
+    } // for motions
 
 
-    // If the face has been located, then starts tracker
-    if(filter->nFaces){
+    // if the face has been located, then starts tracker
+    if (filter->nFaces) {
 
         // Init multi tracker
         if(!filter->init){
