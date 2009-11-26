@@ -193,8 +193,8 @@ gst_tracker_class_init(GstTrackerClass * klass)
     gobject_class->get_property = gst_tracker_get_property;
 
     g_object_class_install_property(gobject_class, PROP_TRACKER_BY_MOTION,
-                                    g_param_spec_boolean("tracker-by-motion", "T racker by motion", "Amendment application to track moving object, instead of subtracting background.",
-                                                         FALSE, G_PARAM_READWRITE));
+                                    g_param_spec_boolean("tracker-by-motion", "Tracker by motion", "Amendment application to track moving object, instead of subtracting background.",
+                                                         TRUE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_VERBOSE,
                                     g_param_spec_boolean("verbose", "Verbose", "Sets whether the movement direction should be printed to the standard output.",
@@ -265,7 +265,6 @@ gst_tracker_init(GstTracker * filter, GstTrackerClass * gclass)
     gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
 
     // set default properties
-    filter->tracker_by_motion  = FALSE;
     filter->verbose            = FALSE;
     filter->show_particles     = FALSE;
     filter->show_features      = FALSE;
@@ -275,6 +274,7 @@ gst_tracker_init(GstTracker * filter, GstTrackerClass * gclass)
     filter->min_points         = DEFAULT_MIN_POINTS;
     filter->win_size           = DEFAULT_WIN_SIZE;
     filter->movement_threshold = DEFAULT_MOVEMENT_THRESHOLD;
+    filter->tracker_by_motion  = TRUE;
 
     filter->state_dim          = DEFAULT_STATE_DIM;
     filter->measurement_dim    = DEFAULT_MEASUREMENT_DIM;
