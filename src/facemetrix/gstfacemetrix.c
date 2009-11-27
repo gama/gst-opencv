@@ -541,7 +541,6 @@ gst_facemetrix_set_caps (GstPad * pad, GstCaps * caps)
 static GstFlowReturn
 gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
 {
-    gchar *id = SGL_UNKNOWN_FACE_ID;
     GstFacemetrix *filter;
 
     filter = GST_FACEMETRIX (GST_OBJECT_PARENT (pad));
@@ -598,6 +597,7 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
                 int     m;
                 CvMat   face;
                 CvRect *rect = (CvRect*) cvGetSeqElem(faces, j);
+                gchar  *id   = SGL_UNKNOWN_FACE_ID;
 
                 // adjust rectangle coordinates due to ROI
                 rect->x += rect_motion.x;
@@ -639,8 +639,11 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
                 }
 
                 if (filter->sgl != NULL) {
-                    CvMat *jpegface = cvEncodeImage(".jpg", &face, NULL);
+                    GstStructure *structure;
+                    GstMessage   *message;
+                    CvMat        *jpegface;
 
+                    jpegface= cvEncodeImage(".jpg", &face, NULL);
                     if (!CV_IS_MAT(jpegface)) {
                         GST_WARNING("CvGetSubRect: unable to convert face sub-image to jpeg format");
                         cvDecRefData(&face);
@@ -652,6 +655,18 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
                     else if (filter->verbose)
                         g_print("[sgl] id: %s\n", id);
 
+                    // send bus message with the face info
+                    structure = gst_structure_new("face-detected",
+                                                  "x",       G_TYPE_UINT,   rect->x,
+                                                  "y",       G_TYPE_UINT,   rect->y,
+                                                  "width",   G_TYPE_UINT,   rect->width,
+                                                  "height",  G_TYPE_UINT,   rect->height,
+                                                  "face-id", G_TYPE_STRING, id, NULL);
+
+                    message = gst_message_new_element(GST_OBJECT(filter), structure);
+                    gst_element_post_message(GST_ELEMENT(filter), message);
+
+                    // release/free/unref alloced variables
                     cvReleaseMat(&jpegface);
                 }
 
