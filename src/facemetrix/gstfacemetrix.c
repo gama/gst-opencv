@@ -267,15 +267,15 @@ gst_facemetrix_class_init(GstFacemetrixClass *klass)
 
     g_object_class_install_property(gobject_class, PROP_VERBOSE,
                                     g_param_spec_boolean("verbose", "Verbose", "Sets whether the movement direction should be printed to the standard output.",
-                                                         TRUE, G_PARAM_READWRITE));
+                                                         FALSE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_SHOW_PARTICLES,
                                     g_param_spec_boolean("show-particles", "Show particles", "Sets whether particles location should be printed to the video.",
-                                                         TRUE, G_PARAM_READWRITE));
+                                                         FALSE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_SHOW_FEATURES,
                                     g_param_spec_boolean("show-features", "Show features", "Sets whether features location should be printed to the video.",
-                                                         TRUE, G_PARAM_READWRITE));
+                                                         FALSE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_SHOW_FEATURES_BOX,
                                     g_param_spec_boolean("show-features-box", "Show features box", "Sets whether features box should be printed to the video.",
@@ -333,10 +333,10 @@ gst_facemetrix_init(GstFacemetrix *filter, GstFacemetrixClass *gclass)
     filter->save_faces  = FALSE;
     filter->save_prefix = g_strdup_printf("%s" G_DIR_SEPARATOR_S "facemetrix", g_get_tmp_dir());
 
-    // tracker
-    filter->verbose            = TRUE;
-    filter->show_particles     = TRUE;
-    filter->show_features      = TRUE;
+    // opencv-related properties
+    filter->verbose            = FALSE;
+    filter->show_particles     = FALSE;
+    filter->show_features      = FALSE;
     filter->show_features_box  = FALSE;
     filter->show_borders       = FALSE;
     filter->max_points         = DEFAULT_MAX_POINTS;
