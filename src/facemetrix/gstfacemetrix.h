@@ -3,7 +3,8 @@
  * Copyright (C) 2005 Thomas Vander Stichele <thomas@apestaart.org>
  * Copyright (C) 2005 Ronald S. Bultje <rbultje@ronald.bitfreak.net>
  * Copyright (C) 2008 Michael Sheldon <mike@mikeasoft.com>
- * Copyright (C) 2009 Vetta Labs Ltda <www.vettalabs.com>
+ * Copyright (C) 2009 Lucas Amorim <lucas@vettalabs.com>
+ * Copyright (C) 2009 Erickson Nascimento <erickson@vettalabs.com>
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -117,6 +118,7 @@ struct _GstFacemetrix
     guint max_points;
     guint min_points;
     guint win_size;
+    float font_scaling;
     float movement_threshold;
     CvConDensation* ConDens;
     int state_dim, measurement_dim;

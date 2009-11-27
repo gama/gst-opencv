@@ -5,6 +5,8 @@
 
 #include "draw.h"
 
+#define LABEL_BORDER 4
+
 CvScalar colorIdx(int i){
     CvScalar vet[] = {COLOR_GREEN,COLOR_MAGENTA,COLOR_BLUE,COLOR_RED,COLOR_YELLOW,COLOR_CIAN};
     return vet[i%6];
@@ -16,31 +18,34 @@ void pi(int i){g_print("INT\t%i\n",i);}
 void ps(int i){int j=0; while(j<i){g_print("\n");++j;}}
 void pt(char *s){g_print("%s\n",s);}
 
-void drawFaceIdentify(IplImage *dst, gchar *idFace, CvRect rectFace, CvScalar color, int drawRect){
+void draw_face_id(IplImage *dst, const gchar *face_id, const CvRect *face_rect,
+                  CvScalar color, float font_scale, gboolean draw_face_box) {
+    CvFont font;
+    CvSize text_size;
+    int    baseline;
 
-    CvPoint a,b;
-    a.x = rectFace.x;
-    a.y = rectFace.y;
-    b.x = rectFace.x+rectFace.width;
-    b.y = rectFace.y+rectFace.height;
+    // sanity checks
+    g_return_if_fail(dst       != NULL);
+    g_return_if_fail(face_id   != NULL);
+    g_return_if_fail(face_rect != NULL);
 
-    // Face box
-    if(drawRect)
-        cvRectangle(dst, a, b, color, 1,1,0);
-
-    // Text box
-    if(idFace != NULL){
-        if(!drawRect) a.x = a.x+(rectFace.width/2)-((strlen(idFace)*PIXELSIZECHAR)/2);
-
+    // draw a box around the face, if requested
+    if (draw_face_box)
         cvRectangle(dst,
-            cvPoint(a.x, a.y-PIXELSIZECHAR),
-            cvPoint((strlen(idFace)*PIXELSIZECHAR)+a.x, a.y),
-            color, -1, 1, 0 );
-        CvFont font;
-        cvInitFont(&font, CV_FONT_HERSHEY_PLAIN, 1.0, .5, 0, 1, CV_AA);
-        cvPutText(dst, idFace , cvPoint(a.x, a.y), &font, cvScalarAll(0));
-    }
-    return;
+                    cvPoint(face_rect->x, face_rect->y),
+                    cvPoint(face_rect->x + face_rect->width, face_rect->y + face_rect->height),
+                    color, 1, 8, 0);
+
+    // setup font and calculate text size
+    cvInitFont(&font, CV_FONT_HERSHEY_DUPLEX, font_scale, font_scale, 0, 1, CV_AA);
+    cvGetTextSize(face_id, &font, &text_size, &baseline);
+
+    // the text is drawn using the given color as background and black as foreground
+    cvRectangle(dst,
+                cvPoint(face_rect->x - LABEL_BORDER, face_rect->y - text_size.height - LABEL_BORDER),
+                cvPoint(face_rect->x + text_size.width + LABEL_BORDER, face_rect->y + LABEL_BORDER),
+                color, -1, 8, 0);
+    cvPutText(dst, face_id , cvPoint(face_rect->x, face_rect->y), &font, cvScalarAll(0));
 }
 
 float distRectToPoint(CvRect rect, CvPoint point){

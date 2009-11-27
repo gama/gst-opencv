@@ -18,9 +18,6 @@
 #define COLOR_YELLOW  CV_RGB(  0, 255, 255)
 #define COLOR_CIAN    CV_RGB(255, 255,   0)
 
-#define PIXELSIZECHAR 8
-
-
 CvScalar colorIdx         (int i);
 
 void     pr               (CvRect ob);
@@ -33,11 +30,12 @@ void     ps               (int i);
 
 void     pt               (char *s);
 
-void     drawFaceIdentify (IplImage *dst,
-                           gchar    *idFace,
-                           CvRect    rectFace,
-                           CvScalar  color,
-                           int       drawRect);
+void     draw_face_id     (IplImage     *dst,
+                           const gchar  *face_id,
+                           const CvRect *face_rect,
+                           CvScalar      color,
+                           float         font_scale,
+                           gboolean      draw_face_box);
 
 int      rectIntercept    (CvRect *a,
                            CvRect *b);

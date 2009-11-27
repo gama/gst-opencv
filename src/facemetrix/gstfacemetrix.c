@@ -532,6 +532,9 @@ gst_facemetrix_set_caps (GstPad * pad, GstCaps * caps)
     // Multi tracker
     filter->points_cluster  = (int*) cvAlloc(filter->max_points * sizeof(int));
 
+    // setup font scaling according to the frame size
+    filter->font_scaling = ((width * height) > (320 * 240)) ? 0.5 : 0.3;
+
     otherpad = (pad == filter->srcpad) ? filter->sinkpad : filter->srcpad;
     gst_object_unref(filter);
     return gst_pad_set_caps(otherpad, caps);
@@ -575,8 +578,11 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
         if(existFaceInThisMotionRect) continue;
         */
 
-        // Display motion box
-        drawFaceIdentify(filter->cvImage, NULL, rect_motion, COLOR_WHITE, 1);
+        // display motion box
+        cvRectangle(filter->cvImage,
+                    cvPoint(rect_motion.x, rect_motion.width),
+                    cvPoint(rect_motion.x + rect_motion.width, rect_motion.y + rect_motion.height),
+                    COLOR_WHITE, 1, 8, 0);
 
         // For each motion box, detect his faces
         if (filter->cvCascade && (rect_motion.width + rect_motion.height != 0)) {
@@ -673,7 +679,7 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
                 cvDecRefData(&face);
 
                 // draw first face box
-                drawFaceIdentify(filter->cvImage, id, *rect, COLOR_GREEN, 1);
+                draw_face_id(filter->cvImage, id, rect, COLOR_GREEN, filter->font_scaling, TRUE);
 
                 // save the face if it has been identified
                 if (filter->nFaces < MAX_NFACES && strcmp(id, SGL_UNKNOWN_FACE_ID) != 0) {
@@ -692,6 +698,7 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
 
     // if the face has been located, then starts tracker
     if (filter->nFaces) {
+        int u;
 
         // Init multi tracker
         if(!filter->init){
@@ -889,10 +896,9 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
         }//init
 
         // Draw identified faces
-        int u;
-        for(u = 0; u < filter->nFaces; ++u)
-            drawFaceIdentify(filter->cvImage, filter->vet_faces[u].name,
-                filter->vet_faces[u].rect, COLOR_MAGENTA, 0);
+        for (u = 0; u < filter->nFaces; ++u)
+            draw_face_id(filter->cvImage, filter->vet_faces[u].name, &filter->vet_faces[u].rect,
+                         COLOR_MAGENTA, filter->font_scaling, FALSE);
 
         filter->prev_avg_x = avg_x;
 
