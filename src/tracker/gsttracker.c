@@ -63,7 +63,6 @@
 
 #include "gsttracker.h"
 
-#include <glib/gprintf.h>
 #include <gst/gst.h>
 #include <identifier_motion.h>
 #include <condensation.h>
@@ -154,7 +153,7 @@ gst_tracker_finalize(GObject * obj)
     if (filter->points[0])    cvFree(&filter->points[0]);
     if (filter->points[1])    cvFree(&filter->points[1]);
     if (filter->status)       cvFree(&filter->status);
-    if (filter->verbose)      g_printf("\n");
+    if (filter->verbose)      g_print("\n");
 
     if (filter->background)         cvReleaseImage(&filter->background);
     if (filter->backgroundModel)    cvReleaseBGCodeBookModel(&filter->backgroundModel);
@@ -523,7 +522,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
                     cvPoint(rectRoi.x, rectRoi.y),
                     cvPoint(rectRoi.x+rectRoi.width, rectRoi.y+rectRoi.height),
                     CV_RGB(255, 0, 255), 3, 0, 0 );
-                printf(" reload...\n");
+                g_print(" reload...\n");
             }
 
             // Mark as initialized
@@ -616,11 +615,10 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
 
         filter->count = k;
         avg_x /= (float) filter->count;
-        // if (filter->verbose) g_printf("[lkoptioncalflow.chain][initialized] filter->count: %d\n", filter->count);
     }
     if (filter->prev_avg_x >= 0) {
         float diff = avg_x - filter->prev_avg_x;
-        if (filter->verbose) g_printf("\r[%7.2f] %s", diff, diff > 2.0 ? "[    >>>]" : diff < -2.0 ? "[<<<    ]" : "[       ]");
+        if (filter->verbose) g_print("\r[%7.2f] %s", diff, diff > 2.0 ? "[    >>>]" : diff < -2.0 ? "[<<<    ]" : "[       ]");
         fflush(stdout);
     }
     filter->prev_avg_x = avg_x;
