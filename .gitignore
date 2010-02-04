@@ -3,6 +3,7 @@
 *.o
 *.a
 *.so
+*.swp
 .libs/
 .deps/
 aclocal.m4
