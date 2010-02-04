@@ -43,50 +43,55 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_FACEDETECT_H__
-#define __GST_FACEDETECT_H__
+#ifndef __GST_FACE_DETECT_H__
+#define __GST_FACE_DETECT_H__
 
 #include <gst/gst.h>
 #include <cv.h>
 
 G_BEGIN_DECLS
-/* #defines don't like whitespacey bits */
-#define GST_TYPE_FACEDETECT \
-  (gst_facedetect_get_type())
-#define GST_FACEDETECT(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FACEDETECT,Gstfacedetect))
-#define GST_FACEDETECT_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FACEDETECT,GstfacedetectClass))
-#define GST_IS_FACEDETECT(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FACEDETECT))
-#define GST_IS_FACEDETECT_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FACEDETECT))
-typedef struct _Gstfacedetect Gstfacedetect;
-typedef struct _GstfacedetectClass GstfacedetectClass;
 
-struct _Gstfacedetect
+#define GST_TYPE_FACE_DETECT            (gst_face_detect_get_type())
+#define GST_FACE_DETECT(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FACE_DETECT,GstFaceDetect))
+#define GST_FACE_DETECT_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FACE_DETECT,GstFaceDetectClass))
+#define GST_IS_FACE_DETECT(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FACE_DETECT))
+#define GST_IS_FACE_DETECT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FACE_DETECT))
+
+typedef struct _GstFaceDetect GstFaceDetect;
+typedef struct _GstFaceDetectClass GstFaceDetectClass;
+
+struct _GstFaceDetect
 {
-  GstElement element;
+    GstElement               element;
 
-  GstPad *sinkpad, *srcpad;
+    GstPad                  *sinkpad;
+    GstPad                  *srcpad;
 
-  gboolean display;
+    IplImage                *image;
+    IplImage                *gray;
+    CvMemStorage            *storage;
+    CvHaarClassifierCascade *cascade;
 
-  gchar *profile;
+    gboolean                 verbose;
+    gboolean                 display;
+    gboolean                 roi_only;
+    gboolean                 save_faces;
+    gchar                   *profile;
+    gchar                   *save_prefix;
+    guint                    min_neighbors;
+    guint                    min_size;
 
-  IplImage *cvImage, *cvGray;
-  CvHaarClassifierCascade *cvCascade;
-  CvMemStorage *cvStorage;
+    GstClockTime             roi_timestamp;
+    GArray                  *roi_array;
 };
 
-struct _GstfacedetectClass
+struct _GstFaceDetectClass
 {
-  GstElementClass parent_class;
+    GstElementClass parent_class;
 };
 
-GType gst_facedetect_get_type (void);
-
-gboolean gst_facedetect_plugin_init (GstPlugin * plugin);
+GType    gst_face_detect_get_type    (void);
+gboolean gst_face_detect_plugin_init (GstPlugin *plugin);
 
 G_END_DECLS
-#endif /* __GST_FACEDETECT_H__ */
+#endif // __GST_FACE_DETECT_H__

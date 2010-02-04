@@ -44,26 +44,25 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_FACEMETRIX_H__
-#define __GST_FACEMETRIX_H__
+#ifndef __GST_BGFG_CODEBOOK_H__
+#define __GST_BGFG_CODEBOOK_H__
 
 #include <gst/gst.h>
 #include <cv.h>
-
-#include "sglclient.h"
+#include <cvaux.h>
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_FACEMETRIX            (gst_facemetrix_get_type())
-#define GST_FACEMETRIX(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FACEMETRIX,GstFaceMetrix))
-#define GST_FACEMETRIX_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FACEMETRIX,GstFaceMetrixClass))
-#define GST_IS_FACEMETRIX(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FACEMETRIX))
-#define GST_IS_FACEMETRIX_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FACEMETRIX))
+#define GST_TYPE_BGFG_CODEBOOK            (gst_bgfg_codebook_get_type())
+#define GST_BGFG_CODEBOOK(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_BGFG_CODEBOOK,GstBgFgCodebook))
+#define GST_BGFG_CODEBOOK_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_BGFG_CODEBOOK,GstBgFgCodebookClass))
+#define GST_IS_BGFG_CODEBOOK(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_BGFG_CODEBOOK))
+#define GST_IS_BGFG_CODEBOOK_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_BGFG_CODEBOOK))
 
-typedef struct _GstFaceMetrix GstFaceMetrix;
-typedef struct _GstFaceMetrixClass GstFaceMetrixClass;
+typedef struct _GstBgFgCodebook GstBgFgCodebook;
+typedef struct _GstBgFgCodebookClass GstBgFgCodebookClass;
 
-struct _GstFaceMetrix
+struct _GstBgFgCodebook
 {
     GstElement               element;
 
@@ -71,26 +70,28 @@ struct _GstFaceMetrix
     GstPad                  *srcpad;
 
     IplImage                *image;
-    gboolean                 verbose;
+    IplImage                *mask;
+    CvBGCodeBookModel       *model;
+
+    guint                    n_frames_learn_bg;
+    guint                    n_frames;
+    float                    perimeter_scale;
+    gboolean                 convex_hull;
+
     gboolean                 display;
-    gboolean                 unknown_faces;
-
-    SglClient               *sgl;
-    gchar                   *host;
-    guint                    port;
-    gchar                   *recognizer_id;
-
-    GstClockTime             face_timestamp;
-    GArray                  *face_array;
+    gboolean                 verbose;
+    gboolean                 send_mask_events;
+    gboolean                 send_roi_events;
 };
 
-struct _GstFaceMetrixClass
+struct _GstBgFgCodebookClass
 {
     GstElementClass parent_class;
 };
 
-GType    gst_facemetrix_get_type    (void);
-gboolean gst_facemetrix_plugin_init (GstPlugin *plugin);
+GType    gst_bgfg_codebook_get_type    (void);
+gboolean gst_bgfg_codebook_plugin_init (GstPlugin *plugin);
 
 G_END_DECLS
-#endif /* __GST_FACEMETRIX_H__ */
+
+#endif /* __GST_BGFG_CODEBOOK_H__ */

@@ -23,6 +23,7 @@
 #include "config.h"
 #endif
 
+#include "gstbgfgcodebook.h"
 #include "gstedgedetect.h"
 #include "gstfaceblur.h"
 #include "gstfacedetect.h"
@@ -37,13 +38,16 @@ static gboolean
 plugin_init (GstPlugin * plugin)
 {
 
+  if (!gst_bgfg_codebook_plugin_init (plugin))
+    return FALSE;
+
   if (!gst_edgedetect_plugin_init (plugin))
     return FALSE;
 
   if (!gst_faceblur_plugin_init (plugin))
     return FALSE;
 
-  if (!gst_facedetect_plugin_init (plugin))
+  if (!gst_face_detect_plugin_init (plugin))
     return FALSE;
 
   if (!gst_facemetrix_plugin_init (plugin))

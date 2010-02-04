@@ -1,6 +1,7 @@
 NULL =
 
 SUBDIRS =														\
+	bgfgcodebook												\
 	common														\
 	edgedetect													\
 	faceblur													\
@@ -21,6 +22,7 @@ libgstopencv_la_SOURCES = gstopencv.c
 # flags used to compile this facedetect
 # add other _CFLAGS and _LIBS as needed
 libgstopencv_la_CFLAGS =										\
+	-I${top_srcdir}/src/bgfgcodebook							\
 	-I${top_srcdir}/src/common									\
 	-I${top_srcdir}/src/edgedetect								\
 	-I${top_srcdir}/src/faceblur								\
@@ -37,6 +39,7 @@ libgstopencv_la_CFLAGS =										\
 
 
 libgstopencv_la_LIBADD =										\
+	$(top_builddir)/src/bgfgcodebook/libgstbgfgcodebook.la		\
 	$(top_builddir)/src/common/libgstcommon.la					\
 	$(top_builddir)/src/edgedetect/libgstedgedetect.la			\
 	$(top_builddir)/src/faceblur/libgstfaceblur.la				\
@@ -54,6 +57,7 @@ libgstopencv_la_LIBADD =										\
 libgstopencv_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 
 libgstopencv_la_DEPENDENCIES =									\
+	$(top_builddir)/src/bgfgcodebook/libgstbgfgcodebook.la		\
 	$(top_builddir)/src/common/libgstcommon.la					\
 	$(top_builddir)/src/edgedetect/libgstedgedetect.la			\
 	$(top_builddir)/src/faceblur/libgstfaceblur.la				\

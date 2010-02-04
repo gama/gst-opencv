@@ -152,6 +152,7 @@ AC_OUTPUT([
     Makefile
     m4/Makefile
     src/Makefile
+    src/bgfgcodebook/Makefile
     src/common/Makefile
     src/edgedetect/Makefile
     src/faceblur/Makefile
