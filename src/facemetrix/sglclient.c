@@ -34,15 +34,18 @@
 #define SGL_EXECUTE_REQUEST          "#execute facemetrix#"
 #define SGL_EXECUTE_RESPONSE_OK      "#ok execute face_metrix#"
 
-#define SGL_USER_LIST_REQUEST        "#list_users#"
-#define SGL_USER_LIST_RESPONSE       "#list_users_response"
+#define SGL_LIST_USERS_REQUEST       "#list_users recognizerid %s#"
+#define SGL_LIST_USERS_RESPONSE      "#list_users_response"
 
-#define SGL_RECOGNIZE_REQUEST        "#recognize reqid %d userid nobody sourceid %s timestamp %s detect %s photo %s#"
+#define SGL_RECOGNIZE_REQUEST        "#recognize reqid %d userid nobody recognizerid %s timestamp %s detect %s photo %s#"
 #define SGL_RECOGNIZE_RESPONSE       "#recognize_response reqid %d userid "
 #define SGL_RECOGNIZE_RESPONSE_FACE_COOR_PARAM "face_coordinates"
 
 #define SGL_STORE_REQUEST            "#store reqid %d userid %s sourceid %s timestamp %s photo %s#"
 #define SGL_STORE_RESPONSE_OK        "#ok store reqid %d#"
+
+#define SGL_UPDATE_REQUEST           "#update_model recognizerid %s sourceid %s#"
+#define SGL_UPDATE_RESPONSE_OK       "#ok update_model#"
 
 #define SGL_REFERENCE_IMAGE_REQUEST  "#reference_image userid %s#"
 #define SGL_REFERENCE_IMAGE_RESPONSE "#reference_image_response photo "
@@ -50,95 +53,56 @@
 #define SGL_TIMESTAMP_FORMAT         "%H:%M:%S-%d/%m/%Y"
 #define SGL_TIMESTAMP_EXAMPLE        "HH:MM:SS-DD/MM/YYYY"
 
+#define MAX_CONNECT_RETRIES          3
+
 // sgl client private members
 #define SGL_CLIENT_GET_PRIVATE(object) (G_TYPE_INSTANCE_GET_PRIVATE((object), SGL_CLIENT_TYPE, SglClientPrivate))
 struct _SglClientPrivate {
-    GTcpSocket* socket;
-    GIOChannel* iochannel;
+    GTcpSocket *socket;
+    GIOChannel *iochannel;
+    gchar      *hostname;
+    guint       port;
     guint       reqid;
 };
 static gpointer sgl_client_parent_class = NULL;
 
 // static function declarations
-static GIOError gnet_read_sgl_command_dup (GIOChannel* channel, gchar** bufferp, gsize* bytes_readp);
-static gchar*   build_timestamp           (void);
-static void     sgl_client_class_init     (gpointer klass, gpointer data);
-static void     sgl_client_init           (GTypeInstance *instance, gpointer data);
-static void     sgl_client_dispose        (GObject *instance);
-static void     sgl_client_finalize       (GObject *instance);
+static GIOError gnet_read_sgl_command_dup   (GIOChannel* channel, gchar** bufferp, gsize* bytes_readp);
+static gchar*   build_timestamp             (void);
+static gboolean iochannel_handler           (GIOChannel *iochannel, GIOCondition condition, gpointer user_data);
+
+static gboolean sgl_client_check_connection (SglClient *client);
+static gboolean sgl_client_connect          (SglClient *client);
+static gboolean sgl_client_rpc              (SglClient *client, const gchar *request, const gsize request_length,
+                                             gchar **response, gsize *response_length, const gchar *expected_response_prefix);
+static void     sgl_client_class_init       (gpointer klass, gpointer data);
+static void     sgl_client_init             (GTypeInstance *instance, gpointer data);
+static void     sgl_client_dispose          (GObject *instance);
+static void     sgl_client_finalize         (GObject *instance);
 
 // --------------------------------------------------------------------
 
 gboolean
 sgl_client_open(SglClient *client, const gchar *hostname, const guint port)
 {
-    gchar *request, *response;
-    gsize request_length, response_length, bytes_written;
-    GIOError error = G_IO_ERROR_NONE;
     SglClientPrivate *priv = SGL_CLIENT_GET_PRIVATE(client);
 
+    // sanity checks
+    g_return_val_if_fail(client   != NULL, FALSE);
+    g_return_val_if_fail(hostname != NULL, FALSE);
+
+    if (priv->hostname != NULL)
+        g_free(priv->hostname);
+    priv->hostname = g_strdup(hostname);
+    priv->port     = port;
+
+    if ((priv->socket != NULL) || (priv->iochannel != NULL)) {
+        g_warning("opening sgl connection on already connected client");
+        sgl_client_close(client);
+    }
+
     // connect to sgl server
-    priv->socket = gnet_tcp_socket_connect(hostname, port);
-    if (priv->socket == NULL) {
-        g_warning("unable to connect to sgl server at %s:%d", hostname, port);
-        return FALSE;
-    }
-
-    // cache & check iochannel pointer
-    priv->iochannel = gnet_tcp_socket_get_io_channel(priv->socket);
-    g_assert(priv->iochannel != NULL);
-
-    // build open_session request string and send it
-    request = g_strdup_printf(SGL_OPEN_SESSION_REQUEST, SGL_USERNAME, SGL_PASSWORD);
-    request_length = strlen(request);
-    error = gnet_io_channel_writen(priv->iochannel, request, request_length, &bytes_written);
-    if ((error != G_IO_ERROR_NONE) || (request_length != bytes_written)) {
-        g_warning("unable to send 'open_session' request: %d (%s)", error, g_strerror(errno));
-        g_free(request);
-        return FALSE;
-    }
-    g_free(request);
-
-    // read and parse open_session response
-    error = gnet_read_sgl_command_dup(priv->iochannel, &response, &response_length);
-    if (error != G_IO_ERROR_NONE) {
-        g_warning("unable to get 'open_session' response: %d (%s)", error, g_strerror(errno));
-        g_free(response);
-        return FALSE;
-    }
-    if (strcmp(response, SGL_OPEN_SESSION_RESPONSE_OK) != 0) {
-        g_warning("unable to parse 'open_session' response: (%s)", response);
-        g_free(response);
-        return FALSE;
-    }
-    g_free(response);
-
-    // build execute request string and send it
-    request = g_strdup_printf(SGL_EXECUTE_REQUEST);
-    request_length = strlen(request);
-    error = gnet_io_channel_writen(priv->iochannel, request, request_length, &bytes_written);
-    if ((error != G_IO_ERROR_NONE) || (request_length != bytes_written)) {
-        g_warning("unable to send 'execute' request: %d (%s)", error, g_strerror(errno));
-        g_free(request);
-        return FALSE;
-    }
-    g_free(request);
-
-    // read and parse execute response
-    error = gnet_read_sgl_command_dup(priv->iochannel, &response, &response_length);
-    if (error != G_IO_ERROR_NONE) {
-        g_warning("unable to get 'execute' response: %d (%s)", error, g_strerror(errno));
-        g_free(response);
-        return FALSE;
-    }
-    if (strcmp(response, SGL_EXECUTE_RESPONSE_OK) != 0) {
-        g_warning("unable to parse 'execute' response: (%s)", response);
-        g_free(response);
-        return FALSE;
-    }
-    g_free(response);
-
-    return TRUE;
+    return sgl_client_connect(client);
 }
 
 void
@@ -146,224 +110,176 @@ sgl_client_close(SglClient *client)
 {
     SglClientPrivate *priv = SGL_CLIENT_GET_PRIVATE(client);
 
-    gnet_tcp_socket_delete(priv->socket);
-    priv->socket    = NULL;
-    priv->iochannel = NULL;
+    if (priv->socket != NULL)
+        gnet_tcp_socket_delete(priv->socket);
+
+    priv->socket      = NULL;
+    priv->iochannel   = NULL;
+    priv->reqid       = 0;
 }
 
 gchar**
-sgl_client_list_users (SglClient *client)
+sgl_client_list_users(SglClient *client, const gchar *recognizerid)
 {
-    gchar *response, **user_list;
-    gsize request_length, response_length, bytes_written;
-    GIOError error = G_IO_ERROR_NONE;
-    SglClientPrivate *priv = SGL_CLIENT_GET_PRIVATE(client);
+    gchar *request, *response, **user_list;
+    gsize  response_length;
 
     // sanity checks
-    g_return_val_if_fail(client          != NULL, FALSE);
-    g_return_val_if_fail(priv->socket    != NULL, FALSE);
-    g_return_val_if_fail(priv->iochannel != NULL, FALSE);
+    g_return_val_if_fail(client != NULL, FALSE);
 
-    // build list_users request string and send it
-    request_length = strlen(SGL_USER_LIST_REQUEST);
-    error = gnet_io_channel_writen(priv->iochannel, SGL_USER_LIST_REQUEST, request_length, &bytes_written);
-    if ((error != G_IO_ERROR_NONE) || (request_length != bytes_written)) {
-        g_warning("unable to send 'list_users' request: %d (%s)", error, g_strerror(errno));
-        return NULL;
-    }
-
-    // read and parse list_users response
-    error = gnet_read_sgl_command_dup(priv->iochannel, &response, &response_length);
-    if (error != G_IO_ERROR_NONE) {
-        g_warning("unable to get 'list_users' response: %d (%s)", error, g_strerror(errno));
-        g_free(response);
-        return NULL;
-    }
-    if ((g_str_has_prefix(response, SGL_USER_LIST_RESPONSE) == FALSE) ||
-        (g_str_has_suffix(response, "#") == FALSE)) {
-        g_warning("unable to parse 'list_users' response: (%s)", response);
-        g_free(response);
+    request = g_strdup_printf(SGL_LIST_USERS_REQUEST, recognizerid);
+    if (sgl_client_rpc(client, SGL_LIST_USERS_REQUEST, strlen(SGL_LIST_USERS_REQUEST),
+                       &response, &response_length, SGL_LIST_USERS_RESPONSE) == FALSE) {
+        g_free(request);
         return NULL;
     }
 
     response[response_length - 1] = '\0';
-    user_list = g_strsplit(response + strlen(SGL_USER_LIST_RESPONSE) + 1, " ", -1);
+    user_list = g_strsplit(response + strlen(SGL_LIST_USERS_RESPONSE) + 1, " ", -1);
+
+    g_free(request);
     g_free(response);
+
     return user_list;
 }
 
 gchar*
-sgl_client_recognize(SglClient *client, const gchar *sourceid, const gboolean detect, const gchar* data,
-                     const guint length, guint *x1, guint *y1, guint *x2, guint *y2)
+sgl_client_recognize(SglClient *client, const gchar *recognizerid, const gboolean detect,
+                     const gchar* data, const guint length, guint *x1, guint *y1, guint *x2, guint *y2)
 {
-    gchar *request, *response, *expected_recognize_response;
+    gchar *request, *response, *expected_response;
     gchar *base64_data, *timestamp, *id, *id_start, *id_end;
-    gsize request_length, response_length, bytes_written;
-    GIOError error = G_IO_ERROR_NONE;
+    gsize response_length;
     SglClientPrivate *priv = SGL_CLIENT_GET_PRIVATE(client);
 
     // sanity checks
-    g_return_val_if_fail(client          != NULL, FALSE);
-    g_return_val_if_fail(priv->socket    != NULL, FALSE);
-    g_return_val_if_fail(priv->iochannel != NULL, FALSE);
-    g_return_val_if_fail(data            != NULL, FALSE);
-    if (detect == TRUE) {
-        g_return_val_if_fail(x1 != NULL, FALSE);
-        g_return_val_if_fail(y1 != NULL, FALSE);
-        g_return_val_if_fail(x2 != NULL, FALSE);
-        g_return_val_if_fail(y2 != NULL, FALSE);
-    }
+    g_return_val_if_fail(client != NULL, FALSE);
+    g_return_val_if_fail(data   != NULL, FALSE);
 
     // convert data to base64 format
     base64_data = g_base64_encode((const guchar*) data, length);
 
-    // build request string and send it
+    // build request string
     timestamp = build_timestamp();
-    request = g_strdup_printf(SGL_RECOGNIZE_REQUEST, ++priv->reqid, sourceid, timestamp, detect ? "Y" : "N", base64_data);
-    request_length = strlen(request);
+    request = g_strdup_printf(SGL_RECOGNIZE_REQUEST, ++priv->reqid, recognizerid, timestamp, detect ? "Y" : "N", base64_data);
     g_free(base64_data);
     g_free(timestamp);
-    error = gnet_io_channel_writen(priv->iochannel, request, request_length, &bytes_written);
-    if ((error != G_IO_ERROR_NONE) || (request_length != bytes_written)) {
-        g_warning("unable to send 'recognize' request: %d (%s)", error, g_strerror(errno));
-        g_free(request);
-        return FALSE;
-    }
-    g_free(request);
 
-    // read and parse the response
-    error = gnet_read_sgl_command_dup(priv->iochannel, &response, &response_length);
-    if (error != G_IO_ERROR_NONE) {
-        g_warning("unable to get 'recognize' response: %d (%s)", error, g_strerror(errno));
-        return FALSE;
-    }
-    expected_recognize_response = g_strdup_printf(SGL_RECOGNIZE_RESPONSE, priv->reqid);
-    if ((g_str_has_prefix(response, expected_recognize_response) == FALSE) ||
-        (g_str_has_suffix(response, "#") == FALSE)) {
-        g_warning("unable to parse 'recognize' response: (%s)", response);
-        g_free(expected_recognize_response);
-        g_free(response);
+    // build expected response prefix
+    expected_response = g_strdup_printf(SGL_RECOGNIZE_RESPONSE, priv->reqid);
+
+    if (sgl_client_rpc(client, request, strlen(request), &response, &response_length,
+                       expected_response) == FALSE) {
+        g_free(request);
+        g_free(expected_response);
         return FALSE;
     }
 
     // extract userid from the response
-    id_start = response + strlen(expected_recognize_response);
+    id_start = response + strlen(expected_response);
     id_end   = index(id_start, ' ');
     if (id_end == NULL) {
         id_end = &response[response_length - 1];
-    } else if (detect) {
+    } else {
         gchar **coords = g_strsplit(id_end + 1, " ", -1);
         if ((g_strv_length(coords) == 5) && (strcmp(coords[0], SGL_RECOGNIZE_RESPONSE_FACE_COOR_PARAM) == 0)) {
-            *x1 = strtol(coords[1], NULL, 0);
-            *y1 = strtol(coords[2], NULL, 0);
-            *x2 = strtol(coords[3], NULL, 0);
-            *y2 = strtol(coords[4], NULL, 0);
+            if (x1 != NULL) *x1 = strtol(coords[1], NULL, 0);
+            if (y1 != NULL) *y1 = strtol(coords[2], NULL, 0);
+            if (x2 != NULL) *x2 = strtol(coords[3], NULL, 0);
+            if (y2 != NULL) *y2 = strtol(coords[4], NULL, 0);
         } else g_warning("invalid 'face coordinates' request parameters: '%s'", id_end);
         g_strfreev(coords);
     }
     id = g_strndup(id_start, id_end - id_start);
 
-    g_free(expected_recognize_response);
+    g_free(request);
     g_free(response);
+    g_free(expected_response);
 
     return id;
 }
 
 gboolean
-sgl_client_store(SglClient *client, const gchar *userid, const gchar *sourceid, const gchar* data, const guint length)
+sgl_client_store(SglClient *client, const gchar *userid, const gchar *sourceid, const gchar* data, const gsize length)
 {
-    gchar *request, *response, *expected_store_response, *base64_data, *timestamp;
-    gsize request_length, response_length, bytes_written;
-    GIOError error = G_IO_ERROR_NONE;
+    gchar *request, *expected_response, *base64_data, *timestamp;
     SglClientPrivate *priv = SGL_CLIENT_GET_PRIVATE(client);
 
     // sanity checks
-    g_return_val_if_fail(client          != NULL, FALSE);
-    g_return_val_if_fail(priv->socket    != NULL, FALSE);
-    g_return_val_if_fail(priv->iochannel != NULL, FALSE);
-    g_return_val_if_fail(data            != NULL, FALSE);
+    g_return_val_if_fail(client != NULL, FALSE);
+    g_return_val_if_fail(data   != NULL, FALSE);
 
     // convert data to base64 format
     base64_data = g_base64_encode((const guchar*) data, length);
 
-    // build request string and send it
+    // build request string
     timestamp = build_timestamp();
     request = g_strdup_printf(SGL_STORE_REQUEST, ++priv->reqid, userid, sourceid, timestamp, base64_data);
-    request_length = strlen(request);
     g_free(base64_data);
     g_free(timestamp);
-    error = gnet_io_channel_writen(priv->iochannel, request, request_length, &bytes_written);
-    if ((error != G_IO_ERROR_NONE) || (request_length != bytes_written)) {
-        g_warning("unable to send 'store' request: %d (%s)", error, g_strerror(errno));
+
+    // build expected response prefix
+    expected_response = g_strdup_printf(SGL_STORE_RESPONSE_OK, priv->reqid);
+
+    if (sgl_client_rpc(client, request, strlen(request), NULL, NULL, expected_response) == FALSE) {
+        g_free(request);
+        g_free(expected_response);
+        return FALSE;
+    }
+
+    g_free(request);
+    g_free(expected_response);
+
+    return TRUE;
+}
+
+gboolean
+sgl_client_update(SglClient *client, const gchar *recognizerid, const gchar *sourceid)
+{
+    gchar *request;
+
+    // sanity checks
+    g_return_val_if_fail(client != NULL, FALSE);
+
+    request = g_strdup_printf(SGL_UPDATE_REQUEST, recognizerid, sourceid);
+
+    if (sgl_client_rpc(client, request, strlen(request), NULL, NULL, SGL_UPDATE_RESPONSE_OK) == FALSE) {
         g_free(request);
         return FALSE;
     }
-    g_free(request);
 
-    // read and parse the response
-    error = gnet_read_sgl_command_dup(priv->iochannel, &response, &response_length);
-    if (error != G_IO_ERROR_NONE) {
-        g_warning("unable to get 'store' response: %d (%s)", error, g_strerror(errno));
-        return FALSE;
-    }
-    expected_store_response = g_strdup_printf(SGL_STORE_RESPONSE_OK, priv->reqid);
-    if ((g_str_has_prefix(response, expected_store_response) == FALSE) ||
-        (g_str_has_suffix(response, "#") == FALSE)) {
-        g_warning("unable to parse 'store' response: (%s)", response);
-        g_free(expected_store_response);
-        g_free(response);
-        return FALSE;
-    }
-    g_free(expected_store_response);
-    g_free(response);
+    g_free(request);
 
     return TRUE;
 }
 
 void
-sgl_client_reference_image (SglClient *client, const gchar *id, gchar** data, gsize* length)
+sgl_client_reference_image(SglClient *client, const gchar *id, gchar** data, gsize* length)
 {
     gchar *request, *response, *data_start, *data_end, *base64_data;
-    gsize request_length, response_length, bytes_written;
-    GIOError error = G_IO_ERROR_NONE;
-    SglClientPrivate *priv = SGL_CLIENT_GET_PRIVATE(client);
+    gsize response_length;
 
     // sanity checks
-    g_return_if_fail(client          != NULL);
-    g_return_if_fail(priv->socket    != NULL);
-    g_return_if_fail(priv->iochannel != NULL);
+    g_return_if_fail(client != NULL);
 
     // build reference_image request string and send it
     request = g_strdup_printf(SGL_REFERENCE_IMAGE_REQUEST, id);
-    request_length = strlen(request);
-    error = gnet_io_channel_writen(priv->iochannel, request, request_length, &bytes_written);
-    if ((error != G_IO_ERROR_NONE) || (request_length != bytes_written)) {
-        g_warning("unable to send 'reference_image' request: %d (%s)", error, g_strerror(errno));
-        return;
-    }
-    g_free(request);
 
-    // read and parse open_session response
-    error = gnet_read_sgl_command_dup(priv->iochannel, &response, &response_length);
-    if (error != G_IO_ERROR_NONE) {
-        g_warning("unable to get 'recognize_image' response: %d (%s)", error, g_strerror(errno));
-        g_free(response);
-        return;
-    }
-    if ((g_str_has_prefix(response, SGL_REFERENCE_IMAGE_RESPONSE) == FALSE) ||
-        (g_str_has_suffix(response, "#") == FALSE)) {
-        g_warning("unable to parse 'reference_image' response: (%s)", response);
-        g_free(response);
+    if (sgl_client_rpc(client, request, strlen(request), &response, &response_length,
+                       SGL_REFERENCE_IMAGE_RESPONSE) == FALSE) {
+        g_free(request);
         return;
     }
 
     data_start    = response + strlen(SGL_REFERENCE_IMAGE_RESPONSE);
     data_end      = &response[response_length - 1];
     base64_data = g_strndup(data_start, data_end - data_start);
-    g_free(response);
 
     // convert image data from base64 format
     *data = (gchar*) g_base64_decode(base64_data, length);
+
+    g_free(request);
+    g_free(response);
     g_free(base64_data);
 }
 
@@ -414,6 +330,153 @@ gnet_read_sgl_command_dup(GIOChannel* channel, gchar** bufferp, gsize* bytes_rea
     *bufferp = buf;
     *bytes_readp = n;
     return error;
+}
+
+static gboolean
+iochannel_handler(GIOChannel *iochannel, GIOCondition condition, gpointer user_data)
+{
+    SglClient *client = SGL_CLIENT(user_data);
+
+    // sanity checks
+    g_return_val_if_fail(iochannel != NULL, FALSE);
+    g_return_val_if_fail(client    != NULL, FALSE);
+
+    g_print("[iochannel_handler] condition: %d\n", condition);
+
+    if (condition & (G_IO_ERR | G_IO_HUP | G_IO_NVAL)) {
+        g_print("received err/hup/nval condition (%d)\n", condition);
+        sgl_client_close(client);
+        return FALSE;
+    } else if (condition & G_IO_IN) {
+        gchar buffer[1024];
+        guint nbytes;
+        GIOStatus iostatus;
+
+        iostatus = g_io_channel_read_chars(iochannel, buffer, 0, &nbytes, NULL);
+        if (iostatus == G_IO_STATUS_ERROR || G_IO_STATUS_EOF) {
+            sgl_client_close(client);
+            return FALSE;
+        } else {
+            g_warning("[iochannel_handler] read %d bytes (return code: %d)", nbytes, iostatus);
+        }
+    }
+    return TRUE;
+}
+
+static gboolean
+sgl_client_check_connection(SglClient *client)
+{
+    SglClientPrivate *priv = SGL_CLIENT_GET_PRIVATE(client);
+
+    return ((priv->socket != NULL) && (priv->iochannel != NULL));
+}
+
+static gboolean
+sgl_client_connect(SglClient *client)
+{
+    SglClientPrivate *priv = SGL_CLIENT_GET_PRIVATE(client);
+
+    // sanity checks
+    g_return_val_if_fail(priv            != NULL, FALSE);
+    g_return_val_if_fail(priv->socket    == NULL, FALSE);
+    g_return_val_if_fail(priv->iochannel == NULL, FALSE);
+    g_return_val_if_fail(priv->hostname  != NULL, FALSE);
+    g_return_val_if_fail(priv->port      != 0,    FALSE);
+
+    // connect to sgl server
+    priv->socket = gnet_tcp_socket_connect(priv->hostname, priv->port);
+    if (priv->socket == NULL) {
+        g_warning("unable to connect to sgl server at %s:%d", priv->hostname, priv->port);
+        return FALSE;
+    }
+
+    // cache & check iochannel pointer
+    priv->iochannel = gnet_tcp_socket_get_io_channel(priv->socket);
+    g_assert(priv->iochannel != NULL);
+
+    // add error watches
+    g_io_add_watch(priv->iochannel, G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+                   iochannel_handler, client);
+
+    // send open_session request
+    if (sgl_client_rpc(client, SGL_OPEN_SESSION_REQUEST, strlen(SGL_OPEN_SESSION_REQUEST),
+                       NULL, NULL, SGL_OPEN_SESSION_RESPONSE_OK) == FALSE) {
+        return FALSE;
+    }
+
+    // then, send execute request
+    if (sgl_client_rpc(client, SGL_EXECUTE_REQUEST, strlen(SGL_EXECUTE_REQUEST),
+                       NULL, NULL, SGL_EXECUTE_RESPONSE_OK) == FALSE) {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static gboolean
+sgl_client_rpc(SglClient *client, const gchar *request, const gsize request_length,
+               gchar **response, gsize *response_length, const gchar *expected_response_prefix)
+{
+    SglClientPrivate *priv;
+    gsize             lresponse_length, bytes_written, retries;
+    gchar            *lresponse;
+    GIOError          error;
+
+    // sanity checks
+    g_return_val_if_fail(client != NULL, FALSE);
+
+    priv = SGL_CLIENT_GET_PRIVATE(client);
+    g_return_val_if_fail(priv != NULL, FALSE);
+
+    retries = 0;
+retry:
+    // check connection and reconnect if necessary
+    if ((sgl_client_check_connection(client) == FALSE) &&
+        (sgl_client_connect(client) == FALSE)) {
+        return FALSE;
+    }
+
+    error = gnet_io_channel_writen(priv->iochannel, (gpointer) request, request_length, &bytes_written);
+    if ((error != G_IO_ERROR_NONE) || (request_length != bytes_written)) {
+        g_warning("unable to send 'recognize' request: %d (%s)", error, g_strerror(errno));
+        return FALSE;
+    }
+
+    // read and parse the response
+    lresponse = NULL; lresponse_length = 0;
+    error = gnet_read_sgl_command_dup(priv->iochannel, &lresponse, &lresponse_length);
+    if (error != G_IO_ERROR_NONE) {
+        g_warning("unable to get 'recognize' response: %d (%s)", error, g_strerror(errno));
+        return FALSE;
+    }
+
+    if (lresponse == NULL) { // EOF => likelly disconnect
+        if (retries < MAX_CONNECT_RETRIES) {
+            sgl_client_close(client);
+            retries++;
+            goto retry;
+        } else {
+            g_warning("max retries reached; aborting");
+            return FALSE;
+        }
+    }
+
+    if ((g_str_has_prefix(lresponse, expected_response_prefix) == FALSE) ||
+        (g_str_has_suffix(lresponse, "#") == FALSE)) {
+        g_warning("unable to parse response: (%s)", lresponse);
+        g_free(lresponse);
+        return FALSE;
+    }
+
+    // set output parameters, if requested
+    if ((response != NULL) && (response_length != NULL)) {
+        *response        = lresponse;
+        *response_length = lresponse_length;
+    } else {
+        g_free(lresponse);
+    }
+
+    return TRUE;
 }
 
 static
@@ -474,20 +537,23 @@ static void
 sgl_client_init(GTypeInstance *instance, gpointer data)
 {
     SglClientPrivate *priv = SGL_CLIENT(instance)->priv = SGL_CLIENT_GET_PRIVATE(instance);
-    priv->reqid     = 0;
     priv->socket    = NULL;
     priv->iochannel = NULL;
+    priv->reqid     = 0;
 }
 
 static void
 sgl_client_dispose(GObject *object)
 {
-    SglClient *client = SGL_CLIENT(object);
+    SglClient        *client = SGL_CLIENT(object);
+    SglClientPrivate *priv   = SGL_CLIENT_GET_PRIVATE(client);
 
-    if (client->priv->socket != NULL) {
+    if (priv->socket != NULL) {
         g_warning("automatically closing sgl session");
         sgl_client_close(client);
     }
+    if (priv->hostname != NULL)
+        g_free(priv->hostname);
 
     G_OBJECT_CLASS(sgl_client_parent_class)->dispose(object);
 }

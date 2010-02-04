@@ -40,7 +40,8 @@ gboolean sgl_client_open       (SglClient      *client,
 
 void     sgl_client_close      (SglClient      *client);
 
-gchar**  sgl_client_list_users (SglClient      *client);
+gchar**  sgl_client_list_users (SglClient      *client,
+                                const gchar    *recognizerid);
 
 gchar*   sgl_client_recognize  (SglClient      *client,
                                 const gchar    *sourceid,
@@ -57,6 +58,10 @@ gboolean sgl_client_store      (SglClient      *client,
                                 const gchar    *sourceid,
                                 const gchar    *data,
                                 const guint     length);
+
+gboolean sgl_client_update     (SglClient      *client,
+                                const gchar    *recognizerid,
+                                const gchar    *sourceid);
 
 void     sgl_client_reference_image (SglClient   *client,
                                      const gchar *id,
