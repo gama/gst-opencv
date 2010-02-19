@@ -76,6 +76,7 @@ struct _GstBgFgCodebook
     guint                    n_frames_learn_bg;
     guint                    n_frames;
     float                    perimeter_scale;
+    guint                    n_morphology_itr;
     gboolean                 convex_hull;
 
     gboolean                 display;

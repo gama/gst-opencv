@@ -67,7 +67,8 @@
 #define DEFAULT_CODEBOOK_MODEL_MIN    10
 #define DEFAULT_CODEBOOK_MODEL_MAX    20
 #define DEFAULT_CODEBOOK_MODEL_BOUNDS 20
-#define DEFAULT_PERIMETER_SCALE        4.0f
+#define DEFAULT_PERIMETER_SCALE       4.0f
+#define DEFAULT_NUM_MORPHOLOGY_ITR      1
 
 enum {
     PROP_0,
@@ -80,7 +81,8 @@ enum {
     PROP_MODEL_MAX,
     PROP_MODEL_BOUNDS,
     PROP_CONVEX_HULL,
-    PROP_PERIMETER_SCALE
+    PROP_PERIMETER_SCALE,
+    PROP_NUM_MORPHOLOGY_ITR
 };
 
 static const CvRect DEFAULT_ROI = {0, 0, 0, 0};
@@ -196,6 +198,10 @@ gst_bgfg_codebook_class_init(GstBgFgCodebookClass *klass)
     g_object_class_install_property(gobject_class, PROP_PERIMETER_SCALE,
                                     g_param_spec_float("permiter-scale", "Perimeter scale", "Perimeter scale used to find the ROI segments",
                                                        0.0f, 128.0f, DEFAULT_PERIMETER_SCALE, G_PARAM_READWRITE)); 
+
+    g_object_class_install_property(gobject_class, PROP_NUM_MORPHOLOGY_ITR,
+                                    g_param_spec_float("n-morphology-itr", "Morphological iterations", "Iterations of morphological operations for exclusion of irrelevant objects",
+                                                       0, 10, DEFAULT_NUM_MORPHOLOGY_ITR, G_PARAM_READWRITE));
 }
 
 //initialize the new element
@@ -223,6 +229,7 @@ gst_bgfg_codebook_init(GstBgFgCodebook *filter, GstBgFgCodebookClass *gclass)
     filter->send_roi_events   = TRUE;
     filter->convex_hull       = FALSE;
     filter->perimeter_scale   = DEFAULT_PERIMETER_SCALE;
+    filter->n_morphology_itr  = DEFAULT_NUM_MORPHOLOGY_ITR;
 
     filter->n_frames          = 0;
     filter->n_frames_learn_bg = DEFAULT_NUM_FRAMES_LEARN_BG;
@@ -270,6 +277,9 @@ gst_bgfg_codebook_set_property(GObject *object, guint prop_id, const GValue *val
         case PROP_PERIMETER_SCALE:
             filter->perimeter_scale = g_value_get_float(value);
             break;
+        case PROP_NUM_MORPHOLOGY_ITR:
+            filter->n_morphology_itr = g_value_get_float(value);
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
             break;
@@ -311,6 +321,9 @@ gst_bgfg_codebook_get_property(GObject *object, guint prop_id, GValue *value, GP
             break;
         case PROP_PERIMETER_SCALE:
             g_value_set_float(value, filter->perimeter_scale);
+            break;
+        case PROP_NUM_MORPHOLOGY_ITR:
+            g_value_set_float(value, filter->n_morphology_itr);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -376,8 +389,12 @@ gst_bgfg_codebook_chain(GstPad *pad, GstBuffer *buf)
         GstEvent     *event;
 
         cvBGCodeBookDiff(filter->model, yuv_image, filter->mask, DEFAULT_ROI);
-        cvDilate(filter->mask, filter->mask, NULL, 1);
-        cvErode(filter->mask, filter->mask, NULL, 1);
+
+        // Exclude artifacts and irrelevant objects
+        if (filter->n_morphology_itr) {
+            cvMorphologyEx(filter->mask, filter->mask, 0, 0, CV_MOP_OPEN, filter->n_morphology_itr);
+            cvMorphologyEx(filter->mask, filter->mask, 0, 0, CV_MOP_CLOSE, filter->n_morphology_itr);
+        }
 
         // send mask event, if requested
         if (filter->send_mask_events) {
