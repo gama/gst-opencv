@@ -7,6 +7,7 @@ SUBDIRS =														\
 	faceblur													\
 	facedetect													\
 	facemetrix													\
+	haaradjust													\
 	motiontemplate												\
 	lkopticalflow												\
 	pyramidsegment												\
@@ -28,6 +29,7 @@ libgstopencv_la_CFLAGS =										\
 	-I${top_srcdir}/src/faceblur								\
 	-I${top_srcdir}/src/facedetect								\
 	-I${top_srcdir}/src/facemetrix								\
+	-I${top_srcdir}/src/haaradjust								\
 	-I${top_srcdir}/src/motiontemplate							\
 	-I${top_srcdir}/src/lkopticalflow							\
 	-I${top_srcdir}/src/pyramidsegment							\
@@ -45,6 +47,7 @@ libgstopencv_la_LIBADD =										\
 	$(top_builddir)/src/faceblur/libgstfaceblur.la				\
 	$(top_builddir)/src/facedetect/libgstfacedetect.la			\
 	$(top_builddir)/src/facemetrix/libgstfacemetrix.la			\
+	$(top_builddir)/src/haaradjust/libgsthaaradjust.la			\
 	$(top_builddir)/src/motiontemplate/libgstmotiontemplate.la	\
 	$(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la	\
 	$(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la	\
@@ -63,6 +66,7 @@ libgstopencv_la_DEPENDENCIES =									\
 	$(top_builddir)/src/faceblur/libgstfaceblur.la				\
 	$(top_builddir)/src/facedetect/libgstfacedetect.la			\
 	$(top_builddir)/src/facemetrix/libgstfacemetrix.la			\
+	$(top_builddir)/src/haaradjust/libgsthaaradjust.la			\
 	$(top_builddir)/src/motiontemplate/libgstmotiontemplate.la	\
 	$(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la	\
 	$(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la	\

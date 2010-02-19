@@ -158,6 +158,7 @@ AC_OUTPUT([
     src/faceblur/Makefile
     src/facedetect/Makefile
     src/facemetrix/Makefile
+    src/haaradjust/Makefile
     src/lkopticalflow/Makefile
     src/motiontemplate/Makefile
     src/pyramidsegment/Makefile
