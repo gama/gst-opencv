@@ -6,7 +6,6 @@ noinst_LTLIBRARIES = libgstfacemetrix.la
 libgstfacemetrix_la_SOURCES =							\
 	gstfacemetrix.c										\
 	sglclient.c											\
-	draw.c												\
 	kmeans.c											\
 	$(NULL)
 
@@ -36,7 +35,6 @@ libgstfacemetrix_la_DEPENDENCIES =						\
 noinst_HEADERS =										\
 	gstfacemetrix.h										\
 	sglclient.h											\
-	draw.h												\
 	kmeans.h											\
 	$(NULL)
 
