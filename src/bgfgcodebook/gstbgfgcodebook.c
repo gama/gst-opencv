@@ -68,7 +68,8 @@
 #define DEFAULT_CODEBOOK_MODEL_MAX    20
 #define DEFAULT_CODEBOOK_MODEL_BOUNDS 20
 #define DEFAULT_PERIMETER_SCALE       4.0f
-#define DEFAULT_NUM_MORPHOLOGY_ITR      1
+#define DEFAULT_NUM_ERODE_ITERATIONS  1
+#define DEFAULT_NUM_DILATE_ITERATIONS 1
 
 enum {
     PROP_0,
@@ -82,10 +83,11 @@ enum {
     PROP_MODEL_BOUNDS,
     PROP_CONVEX_HULL,
     PROP_PERIMETER_SCALE,
-    PROP_NUM_MORPHOLOGY_ITR
+    PROP_NUM_ERODE_ITERATIONS,
+    PROP_NUM_DILATE_ITERATIONS
 };
 
-static const CvRect DEFAULT_ROI = {0, 0, 0, 0};
+static const CvRect NULL_RECT = {0, 0, 0, 0};
 
 GST_DEBUG_CATEGORY_STATIC (gst_bgfg_codebook_debug);
 #define GST_CAT_DEFAULT gst_bgfg_codebook_debug
@@ -199,9 +201,13 @@ gst_bgfg_codebook_class_init(GstBgFgCodebookClass *klass)
                                     g_param_spec_float("permiter-scale", "Perimeter scale", "Perimeter scale used to find the ROI segments",
                                                        0.0f, 128.0f, DEFAULT_PERIMETER_SCALE, G_PARAM_READWRITE)); 
 
-    g_object_class_install_property(gobject_class, PROP_NUM_MORPHOLOGY_ITR,
-                                    g_param_spec_float("n-morphology-itr", "Morphological iterations", "Iterations of morphological operations for exclusion of irrelevant objects",
-                                                       0, 10, DEFAULT_NUM_MORPHOLOGY_ITR, G_PARAM_READWRITE));
+    g_object_class_install_property(gobject_class, PROP_NUM_ERODE_ITERATIONS,
+                                    g_param_spec_float("num-erode-iterations", "Number of erode iterations", "Number of times that an 'erode' filter should be applied to the foreground mask",
+                                                       0, INT_MAX, DEFAULT_NUM_ERODE_ITERATIONS, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_NUM_DILATE_ITERATIONS,
+                                    g_param_spec_float("num-dilate-iterations", "Number of dilate iterations", "Number of times that an 'dilate' filter should be applied to the foreground mask. Note that the 'dilate' filter is applied *after* the 'erode' filter",
+                                                       0, INT_MAX, DEFAULT_NUM_DILATE_ITERATIONS, G_PARAM_READWRITE));
 }
 
 //initialize the new element
@@ -223,16 +229,17 @@ gst_bgfg_codebook_init(GstBgFgCodebook *filter, GstBgFgCodebookClass *gclass)
     gst_element_add_pad(GST_ELEMENT (filter), filter->srcpad);
 
     // set defaults
-    filter->verbose           = FALSE;
-    filter->display           = FALSE;
-    filter->send_mask_events  = FALSE;
-    filter->send_roi_events   = TRUE;
-    filter->convex_hull       = FALSE;
-    filter->perimeter_scale   = DEFAULT_PERIMETER_SCALE;
-    filter->n_morphology_itr  = DEFAULT_NUM_MORPHOLOGY_ITR;
+    filter->verbose             = FALSE;
+    filter->display             = FALSE;
+    filter->send_mask_events    = FALSE;
+    filter->send_roi_events     = TRUE;
+    filter->convex_hull         = FALSE;
+    filter->perimeter_scale     = DEFAULT_PERIMETER_SCALE;
+    filter->n_erode_iterations  = DEFAULT_NUM_ERODE_ITERATIONS;
+    filter->n_dilate_iterations = DEFAULT_NUM_DILATE_ITERATIONS;
 
-    filter->n_frames          = 0;
-    filter->n_frames_learn_bg = DEFAULT_NUM_FRAMES_LEARN_BG;
+    filter->n_frames            = 0;
+    filter->n_frames_learn_bg   = DEFAULT_NUM_FRAMES_LEARN_BG;
 
     // create and setup model parameters
     filter->model = cvCreateBGCodeBookModel();
@@ -277,8 +284,11 @@ gst_bgfg_codebook_set_property(GObject *object, guint prop_id, const GValue *val
         case PROP_PERIMETER_SCALE:
             filter->perimeter_scale = g_value_get_float(value);
             break;
-        case PROP_NUM_MORPHOLOGY_ITR:
-            filter->n_morphology_itr = g_value_get_float(value);
+        case PROP_NUM_ERODE_ITERATIONS:
+            filter->n_erode_iterations = g_value_get_float(value);
+            break;
+        case PROP_NUM_DILATE_ITERATIONS:
+            filter->n_dilate_iterations = g_value_get_float(value);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -322,8 +332,11 @@ gst_bgfg_codebook_get_property(GObject *object, guint prop_id, GValue *value, GP
         case PROP_PERIMETER_SCALE:
             g_value_set_float(value, filter->perimeter_scale);
             break;
-        case PROP_NUM_MORPHOLOGY_ITR:
-            g_value_set_float(value, filter->n_morphology_itr);
+        case PROP_NUM_ERODE_ITERATIONS:
+            g_value_set_float(value, filter->n_erode_iterations);
+            break;
+        case PROP_NUM_DILATE_ITERATIONS:
+            g_value_set_float(value, filter->n_dilate_iterations);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -374,13 +387,13 @@ gst_bgfg_codebook_chain(GstPad *pad, GstBuffer *buf)
 
     // clear stale models right after we stop learning the background
     if (filter->n_frames == (filter->n_frames_learn_bg + 1))
-        cvBGCodeBookClearStale(filter->model, filter->model->t / 2, DEFAULT_ROI, 0);
+        cvBGCodeBookClearStale(filter->model, filter->model->t / 2, NULL_RECT, 0);
 
     yuv_image = cvCloneImage(filter->image);
     cvCvtColor(filter->image, yuv_image, CV_BGR2YCrCb); //YUV For codebook method
 
     if (filter->n_frames <= filter->n_frames_learn_bg) {
-        cvBGCodeBookUpdate(filter->model, yuv_image, DEFAULT_ROI, 0);
+        cvBGCodeBookUpdate(filter->model, yuv_image, NULL_RECT, 0);
         filter->n_frames++;
         if (filter->verbose)
             GST_INFO("[build background] %d frames", filter->n_frames);
@@ -388,13 +401,13 @@ gst_bgfg_codebook_chain(GstPad *pad, GstBuffer *buf)
         GstStructure *structure;
         GstEvent     *event;
 
-        cvBGCodeBookDiff(filter->model, yuv_image, filter->mask, DEFAULT_ROI);
+        cvBGCodeBookDiff(filter->model, yuv_image, filter->mask, NULL_RECT);
 
-        // Exclude artifacts and irrelevant objects
-        if (filter->n_morphology_itr) {
-            cvMorphologyEx(filter->mask, filter->mask, 0, 0, CV_MOP_OPEN, filter->n_morphology_itr);
-            cvMorphologyEx(filter->mask, filter->mask, 0, 0, CV_MOP_CLOSE, filter->n_morphology_itr);
-        }
+        // exclude artifacts and irrelevant objects
+        if (filter->n_erode_iterations > 0)
+            cvErode(filter->mask, filter->mask, NULL, filter->n_erode_iterations);
+        if (filter->n_dilate_iterations > 0)
+            cvDilate(filter->mask, filter->mask, NULL, filter->n_dilate_iterations);
 
         // send mask event, if requested
         if (filter->send_mask_events) {
