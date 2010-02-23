@@ -111,7 +111,8 @@ static void          gst_bgfg_codebook_set_property (GObject * object, guint pro
 static void          gst_bgfg_codebook_get_property (GObject * object, guint prop_id, GValue * value, GParamSpec * pspec);
 static gboolean      gst_bgfg_codebook_set_caps     (GstPad * pad, GstCaps * caps);
 static GstFlowReturn gst_bgfg_codebook_chain        (GstPad * pad, GstBuffer * buf);
-
+static gboolean      rect_overlap                   (const CvRect r1, const CvRect r2);
+static CvRect        rect_collapse                  (const CvRect r1, const CvRect r2);
 
 static void
 set_model_array(guchar *array, guint value)
@@ -442,15 +443,43 @@ gst_bgfg_codebook_chain(GstPad *pad, GstBuffer *buf)
         if (filter->send_roi_events) {
             CvSeq        *contour, *contours;
             CvMemStorage *storage;
+            CvRect       *bounding_rects;
+            guint         i, j, n_rects;
 
             storage  = cvCreateMemStorage(0);
             contours = cvSegmentFGMask(filter->mask, filter->convex_hull ? 0 : 1,
                                        filter->perimeter_scale, storage, cvPoint(0, 0));
 
-            for (contour = contours; contour != NULL; contour = contour->h_next) {
+            // count # of contours, allocate array to store the bounding rectangles
+            for (contour = contours, n_rects = 0; contour != NULL; contour = contour->h_next, ++n_rects);
+            bounding_rects = g_new(CvRect, n_rects);
+
+            for (contour = contours, i = 0; contour != NULL; contour = contour->h_next, ++i)
+                bounding_rects[i] = cvBoundingRect(contour, 0);
+
+            for (i = 0; i < n_rects; ++i) {
+                // skip collapsed rectangles
+                if ((bounding_rects[i].width == 0) || (bounding_rects[i].height == 0)) continue;
+
+                for (j = (i + 1); j < n_rects; ++j) {
+                    // skip collapsed rectangles
+                    if ((bounding_rects[j].width == 0) || (bounding_rects[j].height == 0)) continue;
+
+                    if (rect_overlap(bounding_rects[i], bounding_rects[j])) {
+                        bounding_rects[i] = rect_collapse(bounding_rects[i], bounding_rects[j]);
+                        bounding_rects[j] = NULL_RECT;
+                    }
+                }
+            }
+
+            for (i = 0; i < n_rects; ++i) {
                 GstEvent     *event;
                 GstStructure *structure;
-                CvRect        r = cvBoundingRect(contour, 0);
+                CvRect        r;
+
+                // skip collapsed rectangles
+                r = bounding_rects[i];
+                if ((r.width == 0) || (r.height == 0)) continue;
 
                 structure = gst_structure_new("roi",
                                               "x",         G_TYPE_UINT,   r.x,
@@ -464,7 +493,8 @@ gst_bgfg_codebook_chain(GstPad *pad, GstBuffer *buf)
                 gst_pad_send_event(filter->sinkpad, event);
 
                 if (filter->verbose)
-                    fprintf(stdout, "[roi] x: %d, y: %d, width: %d, height: %d\n", r.x, r.y, r.width, r.height);
+                    GST_INFO("[roi] x: %d, y: %d, width: %d, height: %d\n",
+                             r.x, r.y, r.width, r.height);
 
                 if (filter->display)
                     cvRectangle(filter->image, cvPoint(r.x, r.y), cvPoint(r.x + r.width, r.y + r.height),
@@ -472,6 +502,7 @@ gst_bgfg_codebook_chain(GstPad *pad, GstBuffer *buf)
             }
 
             cvReleaseMemStorage(&storage);
+            g_free(bounding_rects);
         }
 
         if (filter->display)
@@ -481,6 +512,35 @@ gst_bgfg_codebook_chain(GstPad *pad, GstBuffer *buf)
     cvReleaseImage(&yuv_image);
 
     return gst_pad_push(filter->srcpad, buf);
+}
+
+static inline gboolean
+rect_overlap(const CvRect r1, const CvRect r2)
+{
+    guint r1_top, r1_bottom, r1_left, r1_right;
+    guint r2_top, r2_bottom, r2_left, r2_right;
+
+    r1_top  = r1.y; r1_bottom = r1.y + r1.height;
+    r1_left = r1.x; r1_right  = r1.x + r1.width;
+
+    r2_top  = r2.y; r2_bottom = r2.y + r2.height;
+    r2_left = r2.x; r2_right  = r2.x + r2.width;
+
+    return ((r1_top  <= r2_bottom) &&
+            (r2_top  <= r1_bottom) &&
+            (r1_left <= r2_right)  &&
+            (r2_left <= r1_right));
+}
+
+static inline CvRect
+rect_collapse(const CvRect r1, const CvRect r2)
+{
+    CvRect r = cvRect(MIN(r1.x, r2.x), MIN(r1.y, r2.y), 0, 0);
+
+    r.width  = MAX(r1.x + r1.width, r2.x + r2.width) - r.x;
+    r.height = MAX(r1.y + r1.height, r2.y + r2.height) - r.y;
+
+    return r;
 }
 
 // entry point to initialize the plug-in; initialize the plug-in itself
