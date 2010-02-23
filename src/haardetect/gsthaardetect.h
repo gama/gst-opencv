@@ -43,24 +43,24 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_FACE_DETECT_H__
-#define __GST_FACE_DETECT_H__
+#ifndef __GST_HAAR_DETECT_H__
+#define __GST_HAAR_DETECT_H__
 
 #include <gst/gst.h>
 #include <cv.h>
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_FACE_DETECT            (gst_face_detect_get_type())
-#define GST_FACE_DETECT(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FACE_DETECT,GstFaceDetect))
-#define GST_FACE_DETECT_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FACE_DETECT,GstFaceDetectClass))
-#define GST_IS_FACE_DETECT(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FACE_DETECT))
-#define GST_IS_FACE_DETECT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FACE_DETECT))
+#define GST_TYPE_HAAR_DETECT            (gst_haar_detect_get_type())
+#define GST_HAAR_DETECT(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_HAAR_DETECT,GstHaarDetect))
+#define GST_HAAR_DETECT_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_HAAR_DETECT,GstHaarDetectClass))
+#define GST_IS_HAAR_DETECT(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_HAAR_DETECT))
+#define GST_IS_HAAR_DETECT_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_HAAR_DETECT))
 
-typedef struct _GstFaceDetect GstFaceDetect;
-typedef struct _GstFaceDetectClass GstFaceDetectClass;
+typedef struct _GstHaarDetect GstHaarDetect;
+typedef struct _GstHaarDetectClass GstHaarDetectClass;
 
-struct _GstFaceDetect
+struct _GstHaarDetect
 {
     GstElement               element;
 
@@ -75,7 +75,7 @@ struct _GstFaceDetect
     gboolean                 verbose;
     gboolean                 display;
     gboolean                 roi_only;
-    gboolean                 save_faces;
+    gboolean                 save_images;
     gchar                   *profile;
     gchar                   *save_prefix;
     guint                    min_neighbors;
@@ -85,13 +85,13 @@ struct _GstFaceDetect
     GArray                  *roi_array;
 };
 
-struct _GstFaceDetectClass
+struct _GstHaarDetectClass
 {
     GstElementClass parent_class;
 };
 
-GType    gst_face_detect_get_type    (void);
-gboolean gst_face_detect_plugin_init (GstPlugin *plugin);
+GType    gst_haar_detect_get_type    (void);
+gboolean gst_haar_detect_plugin_init (GstPlugin *plugin);
 
 G_END_DECLS
-#endif // __GST_FACE_DETECT_H__
+#endif // __GST_HAAR_DETECT_H__

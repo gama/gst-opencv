@@ -5,9 +5,9 @@ SUBDIRS =														\
 	common														\
 	edgedetect													\
 	faceblur													\
-	facedetect													\
 	facemetrix													\
 	haaradjust													\
+	haardetect													\
 	motiontemplate												\
 	lkopticalflow												\
 	pyramidsegment												\
@@ -20,16 +20,16 @@ plugin_LTLIBRARIES = libgstopencv.la
 # sources used to compile this plug-in
 libgstopencv_la_SOURCES = gstopencv.c
 
-# flags used to compile this facedetect
+# flags used to compile this plug-in
 # add other _CFLAGS and _LIBS as needed
 libgstopencv_la_CFLAGS =										\
 	-I${top_srcdir}/src/bgfgcodebook							\
 	-I${top_srcdir}/src/common									\
 	-I${top_srcdir}/src/edgedetect								\
 	-I${top_srcdir}/src/faceblur								\
-	-I${top_srcdir}/src/facedetect								\
 	-I${top_srcdir}/src/facemetrix								\
 	-I${top_srcdir}/src/haaradjust								\
+	-I${top_srcdir}/src/haardetect								\
 	-I${top_srcdir}/src/motiontemplate							\
 	-I${top_srcdir}/src/lkopticalflow							\
 	-I${top_srcdir}/src/pyramidsegment							\
@@ -45,9 +45,9 @@ libgstopencv_la_LIBADD =										\
 	$(top_builddir)/src/common/libgstcommon.la					\
 	$(top_builddir)/src/edgedetect/libgstedgedetect.la			\
 	$(top_builddir)/src/faceblur/libgstfaceblur.la				\
-	$(top_builddir)/src/facedetect/libgstfacedetect.la			\
 	$(top_builddir)/src/facemetrix/libgstfacemetrix.la			\
 	$(top_builddir)/src/haaradjust/libgsthaaradjust.la			\
+	$(top_builddir)/src/haardetect/libgsthaardetect.la			\
 	$(top_builddir)/src/motiontemplate/libgstmotiontemplate.la	\
 	$(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la	\
 	$(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la	\
@@ -64,9 +64,9 @@ libgstopencv_la_DEPENDENCIES =									\
 	$(top_builddir)/src/common/libgstcommon.la					\
 	$(top_builddir)/src/edgedetect/libgstedgedetect.la			\
 	$(top_builddir)/src/faceblur/libgstfaceblur.la				\
-	$(top_builddir)/src/facedetect/libgstfacedetect.la			\
 	$(top_builddir)/src/facemetrix/libgstfacemetrix.la			\
 	$(top_builddir)/src/haaradjust/libgsthaaradjust.la			\
+	$(top_builddir)/src/haardetect/libgsthaardetect.la			\
 	$(top_builddir)/src/motiontemplate/libgstmotiontemplate.la	\
 	$(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la	\
 	$(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la	\

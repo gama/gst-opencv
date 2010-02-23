@@ -44,14 +44,14 @@
  */
 
 /**
- * SECTION:element-facedetect
+ * SECTION:element-haardetect
  *
- * FIXME:Describe facedetect here.
+ * FIXME:Describe haardetect here.
  *
  * <refsect2>
  * <title>Example launch line</title>
  * |[
- * gst-launch-0.10 videotestsrc ! decodebin ! ffmpegcolorspace ! facedetect ! ffmpegcolorspace ! xvimagesink
+ * gst-launch-0.10 videotestsrc ! decodebin ! ffmpegcolorspace ! haardetect ! ffmpegcolorspace ! xvimagesink
  * ]|
  * </refsect2>
  */
@@ -60,18 +60,18 @@
 #  include <config.h>
 #endif
 
-#include "gstfacedetect.h"
+#include "gsthaardetect.h"
 
 #include <sys/time.h>
 #include <gst/gst.h>
 #include <cvaux.h>
 #include <highgui.h>
 
-GST_DEBUG_CATEGORY_STATIC (gst_face_detect_debug);
-#define GST_CAT_DEFAULT gst_face_detect_debug
+GST_DEBUG_CATEGORY_STATIC (gst_haar_detect_debug);
+#define GST_CAT_DEFAULT gst_haar_detect_debug
 
-#define DEFAULT_PROFILE       "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml"
-#define DEFAULT_SAVE_PREFIX   "/tmp/facemetrix"
+#define DEFAULT_PROFILE       "/usr/share/opencv/haarcascades/haarcascade_frontalhaar_default.xml"
+#define DEFAULT_SAVE_PREFIX   "/tmp/haarmetrix"
 #define DEFAULT_MIN_NEIGHBORS  5
 #define DEFAULT_MIN_SIZE      20
 
@@ -84,7 +84,7 @@ enum
     PROP_PROFILE,
     PROP_MIN_NEIGHBORS,
     PROP_MIN_SIZE,
-    PROP_SAVE_FACES,
+    PROP_SAVE_IMAGES,
     PROP_SAVE_PREFIX
 };
 
@@ -102,23 +102,23 @@ static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
     GST_STATIC_CAPS ("video/x-raw-rgb")
     );
 
-GST_BOILERPLATE (GstFaceDetect, gst_face_detect, GstElement, GST_TYPE_ELEMENT);
+GST_BOILERPLATE (GstHaarDetect, gst_haar_detect, GstElement, GST_TYPE_ELEMENT);
 
-static void          gst_face_detect_set_property (GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec);
-static void          gst_face_detect_get_property (GObject * object, guint prop_id, GValue *value, GParamSpec *pspec);
+static void          gst_haar_detect_set_property (GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec);
+static void          gst_haar_detect_get_property (GObject * object, guint prop_id, GValue *value, GParamSpec *pspec);
 static gboolean      roi_events_cb                (GstPad *pad, GstEvent *event, gpointer user_data);
-static void          detect_faces                 (GstFaceDetect *filter, GstBuffer *buf);
-static gboolean      gst_face_detect_set_caps     (GstPad *pad, GstCaps *caps);
-static GstFlowReturn gst_face_detect_chain        (GstPad * pad, GstBuffer * buf);
-static void          gst_face_detect_load_profile (GstFaceDetect *filter);
+static void          detect_haars                 (GstHaarDetect *filter, GstBuffer *buf);
+static gboolean      gst_haar_detect_set_caps     (GstPad *pad, GstCaps *caps);
+static GstFlowReturn gst_haar_detect_chain        (GstPad * pad, GstBuffer * buf);
+static void          gst_haar_detect_load_profile (GstHaarDetect *filter);
 static gchar*        build_timestamp              ();
 
 
 // clean up
 static void
-gst_face_detect_finalize(GObject *obj)
+gst_haar_detect_finalize(GObject *obj)
 {
-    GstFaceDetect *filter = GST_FACE_DETECT(obj);
+    GstHaarDetect *filter = GST_HAAR_DETECT(obj);
 
     if (filter->image)   cvReleaseImage(&filter->image);
     if (filter->gray)    cvReleaseImage(&filter->gray);
@@ -131,43 +131,43 @@ gst_face_detect_finalize(GObject *obj)
 
 // gobject vmethod implementations
 static void
-gst_face_detect_base_init (gpointer gclass)
+gst_haar_detect_base_init (gpointer gclass)
 {
     GstElementClass *element_class = GST_ELEMENT_CLASS(gclass);
 
     gst_element_class_set_details_simple(element_class,
-                                         "facedetect",
+                                         "haardetect",
                                          "Filter/Video",
-                                         "Performs face detection on videos and images, providing detected positions via downstream events",
+                                         "Performs haar detection on videos and images, providing detected positions via downstream events",
                                          "Michael Sheldon <mike@mikeasoft.com>");
 
     gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&src_factory));
     gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&sink_factory));
 }
 
-// initialize the facedetect's class
+// initialize the haardetect's class
 static void
-gst_face_detect_class_init(GstFaceDetectClass *klass)
+gst_haar_detect_class_init(GstHaarDetectClass *klass)
 {
     GObjectClass *gobject_class;
 
     gobject_class = (GObjectClass*) klass;
     parent_class  = g_type_class_peek_parent(klass);
 
-    gobject_class->finalize     = GST_DEBUG_FUNCPTR(gst_face_detect_finalize);
-    gobject_class->set_property = gst_face_detect_set_property;
-    gobject_class->get_property = gst_face_detect_get_property;
+    gobject_class->finalize     = GST_DEBUG_FUNCPTR(gst_haar_detect_finalize);
+    gobject_class->set_property = gst_haar_detect_set_property;
+    gobject_class->get_property = gst_haar_detect_get_property;
 
     g_object_class_install_property(gobject_class, PROP_VERBOSE,
                                     g_param_spec_boolean("verbose", "Verbose", "Sets whether the movement direction should be printed to the standard output",
                                                          FALSE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_DISPLAY,
-                                    g_param_spec_boolean("display", "Display", "Highligh the detected faces in the video output",
+                                    g_param_spec_boolean("display", "Display", "Highligh the detected haars in the video output",
                                                          FALSE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_ROI_ONLY,
-                                    g_param_spec_boolean("roi-only", "ROI only", "Only try to detect faces when one or more ROIs have been set",
+                                    g_param_spec_boolean("roi-only", "ROI only", "Only try to detect haars when one or more ROIs have been set",
                                                          TRUE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_PROFILE,
@@ -175,19 +175,19 @@ gst_face_detect_class_init(GstFaceDetectClass *klass)
                                                         DEFAULT_PROFILE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_MIN_NEIGHBORS,
-                                    g_param_spec_uint("min-neighbors", "Haar Minimum Neighbors", "Minimum number of neighbor pixels used to search for face patterns",
+                                    g_param_spec_uint("min-neighbors", "Haar Minimum Neighbors", "Minimum number of neighbor pixels used to search for haar patterns",
                                                       0, UINT_MAX, DEFAULT_MIN_NEIGHBORS, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_MIN_SIZE,
-                                    g_param_spec_uint("min-size", "Haar Minimum Size", "Minimum size of a face",
+                                    g_param_spec_uint("min-size", "Haar Minimum Size", "Minimum size of a haar",
                                                       0, UINT_MAX, DEFAULT_MIN_SIZE, G_PARAM_READWRITE));
 
-    g_object_class_install_property(gobject_class, PROP_SAVE_FACES,
-                                    g_param_spec_boolean("save-faces", "Save detected faces", "Save detected faces as JPEG images",
+    g_object_class_install_property(gobject_class, PROP_SAVE_IMAGES,
+                                    g_param_spec_boolean("save-images", "Save detected objects", "Save detected objects as JPEG images",
                                                          FALSE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_SAVE_PREFIX,
-                                    g_param_spec_string("save-prefix", "Filename prefix of the saved images", "Use the given prefix to build the name of the files where the detected faces will be saved. The full file path will be '<save-prefix>_<face#>_<timestamp>.jpg'",
+                                    g_param_spec_string("save-prefix", "Filename prefix of the saved images", "Use the given prefix to build the name of the files where the detected haars will be saved. The full file path will be '<save-prefix>_<haar#>_<timestamp>.jpg'",
                                                         DEFAULT_SAVE_PREFIX, G_PARAM_READWRITE));
 }
 
@@ -196,12 +196,12 @@ gst_face_detect_class_init(GstFaceDetectClass *klass)
 // set pad calback functions
 // initialize instance structure
 static void
-gst_face_detect_init(GstFaceDetect *filter, GstFaceDetectClass *gclass)
+gst_haar_detect_init(GstHaarDetect *filter, GstHaarDetectClass *gclass)
 {
     filter->sinkpad = gst_pad_new_from_static_template (&sink_factory, "sink");
-    gst_pad_set_setcaps_function(filter->sinkpad, GST_DEBUG_FUNCPTR(gst_face_detect_set_caps));
+    gst_pad_set_setcaps_function(filter->sinkpad, GST_DEBUG_FUNCPTR(gst_haar_detect_set_caps));
     gst_pad_set_getcaps_function(filter->sinkpad, GST_DEBUG_FUNCPTR(gst_pad_proxy_getcaps));
-    gst_pad_set_chain_function(filter->sinkpad, GST_DEBUG_FUNCPTR(gst_face_detect_chain));
+    gst_pad_set_chain_function(filter->sinkpad, GST_DEBUG_FUNCPTR(gst_haar_detect_chain));
 
     filter->srcpad = gst_pad_new_from_static_template (&src_factory, "src");
     gst_pad_set_getcaps_function(filter->srcpad, GST_DEBUG_FUNCPTR(gst_pad_proxy_getcaps));
@@ -215,16 +215,16 @@ gst_face_detect_init(GstFaceDetect *filter, GstFaceDetectClass *gclass)
     filter->roi_timestamp = 0;
     filter->roi_array     = g_array_sized_new(FALSE, FALSE, sizeof(CvRect), 4);
     filter->profile       = DEFAULT_PROFILE;
-    filter->save_faces    = FALSE;
+    filter->save_images   = FALSE;
     filter->save_prefix   = DEFAULT_SAVE_PREFIX;
 
-    gst_face_detect_load_profile(filter);
+    gst_haar_detect_load_profile(filter);
 }
 
 static void
-gst_face_detect_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec)
+gst_haar_detect_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec)
 {
-    GstFaceDetect *filter = GST_FACE_DETECT(object);
+    GstHaarDetect *filter = GST_HAAR_DETECT(object);
 
     switch (prop_id) {
         case PROP_VERBOSE:
@@ -238,7 +238,7 @@ gst_face_detect_set_property(GObject *object, guint prop_id, const GValue *value
             break;
         case PROP_PROFILE:
             filter->profile = g_value_dup_string(value);
-            gst_face_detect_load_profile (filter);
+            gst_haar_detect_load_profile (filter);
             break;
         case PROP_MIN_NEIGHBORS:
             filter->min_neighbors = g_value_get_uint(value);
@@ -246,8 +246,8 @@ gst_face_detect_set_property(GObject *object, guint prop_id, const GValue *value
         case PROP_MIN_SIZE:
             filter->min_size = g_value_get_uint(value);
             break;
-        case PROP_SAVE_FACES:
-            filter->save_faces = g_value_get_boolean(value);
+        case PROP_SAVE_IMAGES:
+            filter->save_images = g_value_get_boolean(value);
             break;
         case PROP_SAVE_PREFIX:
             filter->save_prefix = g_value_dup_string(value);
@@ -259,9 +259,9 @@ gst_face_detect_set_property(GObject *object, guint prop_id, const GValue *value
 }
 
 static void
-gst_face_detect_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+gst_haar_detect_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 {
-    GstFaceDetect *filter = GST_FACE_DETECT(object);
+    GstHaarDetect *filter = GST_HAAR_DETECT(object);
 
     switch (prop_id) {
         case PROP_VERBOSE:
@@ -282,8 +282,8 @@ gst_face_detect_get_property(GObject *object, guint prop_id, GValue *value, GPar
         case PROP_MIN_SIZE:
             g_value_set_uint(value, filter->min_size);
             break;
-        case PROP_SAVE_FACES:
-            g_value_set_boolean(value, filter->save_faces);
+        case PROP_SAVE_IMAGES:
+            g_value_set_boolean(value, filter->save_images);
             break;
         case PROP_SAVE_PREFIX:
             g_value_take_string(value, filter->save_prefix);
@@ -298,14 +298,14 @@ gst_face_detect_get_property(GObject *object, guint prop_id, GValue *value, GPar
 
 // this function handles the link with other elements
 static gboolean
-gst_face_detect_set_caps (GstPad *pad, GstCaps *caps)
+gst_haar_detect_set_caps (GstPad *pad, GstCaps *caps)
 {
-    GstFaceDetect *filter;
+    GstHaarDetect *filter;
     GstPad        *other_pad;
     GstStructure  *structure;
     gint           width, height, depth;
 
-    filter = GST_FACE_DETECT (gst_pad_get_parent (pad));
+    filter = GST_HAAR_DETECT (gst_pad_get_parent (pad));
     structure = gst_caps_get_structure(caps, 0);
     gst_structure_get_int(structure, "width",  &width);
     gst_structure_get_int(structure, "height", &height);
@@ -325,18 +325,18 @@ gst_face_detect_set_caps (GstPad *pad, GstCaps *caps)
 
 // chain function; this function does the actual processing
 static GstFlowReturn
-gst_face_detect_chain(GstPad *pad, GstBuffer *buf)
+gst_haar_detect_chain(GstPad *pad, GstBuffer *buf)
 {
-    GstFaceDetect *filter;
+    GstHaarDetect *filter;
 
     // sanity checks
     g_return_val_if_fail(pad != NULL, GST_FLOW_ERROR);
     g_return_val_if_fail(buf != NULL, GST_FLOW_ERROR);
 
-    filter = GST_FACE_DETECT(GST_OBJECT_PARENT(pad));
+    filter = GST_HAAR_DETECT(GST_OBJECT_PARENT(pad));
 
     // if no cascade could be loaded, let the pipeline continue as if
-    // the face detect element was not present
+    // the haar detect element was not present
     g_return_val_if_fail(filter->cascade != NULL, GST_FLOW_OK);
 
     filter->image->imageData = (char*) GST_BUFFER_DATA(buf);
@@ -353,11 +353,11 @@ gst_face_detect_chain(GstPad *pad, GstBuffer *buf)
         int i;
         for (i = 0; i < filter->roi_array->len; ++i) {
             cvSetImageROI(filter->gray, g_array_index(filter->roi_array, CvRect, i));
-            detect_faces(filter, buf);
+            detect_haars(filter, buf);
             cvResetImageROI(filter->gray);
         }
     } else if (filter->roi_only == FALSE)
-        detect_faces(filter, buf);
+        detect_haars(filter, buf);
 
     gst_buffer_set_data(buf, (guchar*) filter->image->imageData, filter->image->imageSize);
 
@@ -365,28 +365,28 @@ gst_face_detect_chain(GstPad *pad, GstBuffer *buf)
 }
 
 static void
-detect_faces(GstFaceDetect *filter, GstBuffer *buf)
+detect_haars(GstHaarDetect *filter, GstBuffer *buf)
 {
     guint i;
     CvRect roi;
-    CvSeq *faces;
+    CvSeq *haars;
 
-    faces = cvHaarDetectObjects(filter->gray, filter->cascade, filter->storage,
+    haars = cvHaarDetectObjects(filter->gray, filter->cascade, filter->storage,
                                 1.1, filter->min_neighbors, CV_HAAR_DO_CANNY_PRUNING,
                                 cvSize(filter->min_size, filter->min_size));
 
-    if ((faces == NULL) || (faces->total <= 0))
+    if ((haars == NULL) || (haars->total <= 0))
         return;
 
     roi = cvGetImageROI(filter->gray);
 
-    for (i = 0; i < faces->total; ++i) {
+    for (i = 0; i < haars->total; ++i) {
         CvRect       *r;
         GstEvent     *event;
         GstStructure *structure;
 
-        r = (CvRect*) cvGetSeqElem(faces, i);
-        structure = gst_structure_new("face",
+        r = (CvRect*) cvGetSeqElem(haars, i);
+        structure = gst_structure_new("haar-detect-roi",
                                       "x",      G_TYPE_UINT, roi.x + r->x,
                                       "y",      G_TYPE_UINT, roi.y + r->y,
                                       "width",  G_TYPE_UINT, r->width,
@@ -398,51 +398,48 @@ detect_faces(GstFaceDetect *filter, GstBuffer *buf)
         gst_pad_push_event(filter->srcpad, event);
 
         if (filter->verbose)
-            GST_INFO("[face] x: %d, y: %d, width: %d, height: %d",
+            GST_INFO("[haar] x: %d, y: %d, width: %d, height: %d",
                     roi.x + r->x, roi.y + r->y, r->width, r->height);
 
-        if (filter->save_faces) {
-            IplImage *face_image;
+        if (filter->save_images) {
+            IplImage *haar_image;
             gchar    *filename, *timestamp;
 
-            face_image = cvCreateImage(cvSize(r->width, r->height), IPL_DEPTH_8U, 3);
+            haar_image = cvCreateImage(cvSize(r->width, r->height), IPL_DEPTH_8U, 3);
             cvSetImageROI(filter->image, cvRect(roi.x + r->x, roi.y + r->y, r->width, r->height));
-            cvCopy(filter->image, face_image, NULL);
+            cvCopy(filter->image, haar_image, NULL);
             cvResetImageROI(filter->image);
 
             // the opencv load/saving functions only work on the BGR colorspace
-            cvCvtColor(face_image, face_image, CV_RGB2BGR);
+            cvCvtColor(haar_image, haar_image, CV_RGB2BGR);
 
             timestamp = build_timestamp();
-            if (faces->total > 1)
+            if (haars->total > 1)
                 filename = g_strdup_printf("%s_%u_%s.jpg", filter->save_prefix, i, timestamp);
             else
                 filename = g_strdup_printf("%s_%s.jpg", filter->save_prefix, timestamp);
 
-            if (cvSaveImage(filename, face_image, 0) == FALSE)
-                GST_ERROR("unable to save detected face image to file '%s'", filename);
+            if (cvSaveImage(filename, haar_image, 0) == FALSE)
+                GST_ERROR("unable to save detected haar image to file '%s'", filename);
             else if (filter->verbose)
-                GST_INFO("[face][saved] filename: \"%s\"", filename);
+                GST_INFO("[haar][saved] filename: \"%s\"", filename);
 
             g_free(timestamp);
             g_free(filename);
-            cvReleaseImage(&face_image);
+            cvReleaseImage(&haar_image);
         }
 
         if (filter->display) {
-            CvPoint center;
-            int radius;
-
-            center.x = cvRound(((r->x + roi.x) + r->width * 0.5));
-            center.y = cvRound(((r->y + roi.y) + r->height * 0.5));
-            radius   = cvRound((r->width + r->height) * 0.25);
-            cvCircle(filter->image, center, radius, CV_RGB(255, 0, 0), 2, 8, 0);
+            cvRectangle(filter->image,
+                        cvPoint(r->x + roi.x, r->y + roi.y),
+                        cvPoint(r->x + roi.x + r->width, r->y + roi.y + r->height),
+                        CV_RGB(255, 0, 0), 1, 8, 0);
         }
     }
 }
 
 static void
-gst_face_detect_load_profile(GstFaceDetect *filter)
+gst_haar_detect_load_profile(GstHaarDetect *filter)
 {
     filter->cascade = (CvHaarClassifierCascade*) cvLoad(filter->profile, 0, 0, 0);
     if (filter->cascade == NULL)
@@ -461,10 +458,10 @@ build_timestamp()
 static
 gboolean roi_events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
 {
-    GstFaceDetect      *filter;
+    GstHaarDetect      *filter;
     const GstStructure *structure;
 
-    filter = GST_FACE_DETECT(user_data);
+    filter = GST_HAAR_DETECT(user_data);
 
     // sanity checks
     g_return_val_if_fail(pad    != NULL, FALSE);
@@ -497,11 +494,11 @@ gboolean roi_events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
 // entry point to initialize the plug-in; initialize the plug-in itself
 // and registers the element factories and other features
 gboolean
-gst_face_detect_plugin_init (GstPlugin * plugin)
+gst_haar_detect_plugin_init (GstPlugin * plugin)
 {
     // debug category for filtering log messages
-    GST_DEBUG_CATEGORY_INIT(gst_face_detect_debug, "facedetect", 0,
-                            "Performs face detection on videos and images, providing detected positions via downstream events");
+    GST_DEBUG_CATEGORY_INIT(gst_haar_detect_debug, "haardetect", 0,
+                            "Performs haar detection on videos and images, providing detected positions via downstream events");
 
-    return gst_element_register(plugin, "facedetect", GST_RANK_NONE, GST_TYPE_FACE_DETECT);
+    return gst_element_register(plugin, "haardetect", GST_RANK_NONE, GST_TYPE_HAAR_DETECT);
 }

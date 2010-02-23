@@ -26,7 +26,7 @@
 #include "gstbgfgcodebook.h"
 #include "gstedgedetect.h"
 #include "gstfaceblur.h"
-#include "gstfacedetect.h"
+#include "gsthaardetect.h"
 #include "gstfacemetrix.h"
 #include "gsthaaradjust.h"
 #include "gstmotiontemplate.h"
@@ -48,10 +48,10 @@ plugin_init (GstPlugin * plugin)
   if (!gst_faceblur_plugin_init (plugin))
     return FALSE;
 
-  if (!gst_face_detect_plugin_init (plugin))
+  if (!gst_haar_adjust_plugin_init (plugin))
     return FALSE;
 
-  if (!gst_haar_adjust_plugin_init (plugin))
+  if (!gst_haar_detect_plugin_init (plugin))
     return FALSE;
 
   if (!gst_motion_template_plugin_init (plugin))

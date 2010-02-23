@@ -364,7 +364,7 @@ gboolean events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
     structure = gst_event_get_structure(event);
 
     //TODO rename structure "face"
-    if ((structure != NULL) && (strcmp(gst_structure_get_name(structure), "face") == 0)) {
+    if ((structure != NULL) && (strcmp(gst_structure_get_name(structure), "haar-detect-roi") == 0)) {
         CvRect rect;
         GstClockTime timestamp;
 
