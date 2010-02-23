@@ -469,7 +469,7 @@ gboolean roi_events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
     g_return_val_if_fail(filter != NULL, FALSE);
 
     structure = gst_event_get_structure(event);
-    if ((structure != NULL) && (strcmp(gst_structure_get_name(structure), "roi") == 0)) {
+    if ((structure != NULL) && (strcmp(gst_structure_get_name(structure), "bgfg-roi") == 0)) {
         CvRect roi;
         GstClockTime timestamp;
 

@@ -418,7 +418,7 @@ gst_bgfg_codebook_chain(GstPad *pad, GstBuffer *buf)
             data_array = g_array_sized_new(FALSE, FALSE, sizeof(filter->mask->imageData[0]), filter->mask->imageSize);
             g_array_append_vals(data_array, filter->mask->imageData, filter->mask->imageSize);
 
-            structure = gst_structure_new("mask",
+            structure = gst_structure_new("bgfg-mask",
                                           "data",      G_TYPE_POINTER, data_array,
                                           "width",     G_TYPE_UINT, filter->mask->width,
                                           "height",    G_TYPE_UINT, filter->mask->height,
@@ -481,7 +481,7 @@ gst_bgfg_codebook_chain(GstPad *pad, GstBuffer *buf)
                 r = bounding_rects[i];
                 if ((r.width == 0) || (r.height == 0)) continue;
 
-                structure = gst_structure_new("roi",
+                structure = gst_structure_new("bgfg-roi",
                                               "x",         G_TYPE_UINT,   r.x,
                                               "y",         G_TYPE_UINT,   r.y,
                                               "width",     G_TYPE_UINT,   r.width,
