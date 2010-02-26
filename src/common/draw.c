@@ -146,9 +146,20 @@ int pointIntoRect(CvRect rect, CvPoint point){
     else return 1;
 }
 
-int rectIntercept(CvRect *a, CvRect *b){
-    CvRect rect_sum = cvMaxRect(a,b);
-    if(rect_sum.width > (a->width + b->width)) return 0;
-    if(rect_sum.height > (a->height + b->height)) return 0;
-    return 1;
+CvRect rectIntersection(const CvRect r1, const CvRect r2){
+    CvRect r = cvRect( MAX(r1.x, r2.x), MAX(r1.y, r2.y), 0, 0 );
+    r.width  = MIN(r1.x + r1.width, r2.x + r2.width) - r.x;
+    r.height = MIN(r1.y + r1.height, r2.y + r2.height) - r.y;
+    return r;
 }
+
+float rectIntercept(CvRect *a, CvRect *b){
+    CvRect rect = cvMaxRect(a,b);
+    if(rect.width > (a->width + b->width)) return 0;
+    if(rect.height > (a->height + b->height)) return 0;
+    
+    rect = rectIntersection(*a, *b);
+    return (float)(rect.height * rect.width)/(a->height * a->width);
+}
+
+

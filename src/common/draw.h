@@ -8,6 +8,14 @@
 #include <glib.h>
 #include <cv.h>
 
+#include <opencv/cxcore.h>
+#include <opencv/cv.h>
+#include <highgui.h>
+#include <cvaux.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
+
 #define COLOR_WHITE   CV_RGB(255, 255, 255)
 #define COLOR_GREEN   CV_RGB(  0, 255,   0)
 #define COLOR_MAGENTA CV_RGB(255,   0, 255)
@@ -37,8 +45,11 @@ void     draw_face_id       (IplImage     *dst,
                              float         font_scale,
                              gboolean      draw_face_box);
 
-int      rectIntercept      (CvRect       *a,
+float    rectIntercept      (CvRect       *a,
                              CvRect       *b);
+
+CvRect   rectIntersection   (const CvRect  r1,
+                             const CvRect  r2);
 
 float    distRectToPoint    (CvRect        rect,
                              CvPoint       point);

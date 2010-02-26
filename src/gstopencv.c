@@ -31,6 +31,7 @@
 #include "gsthaaradjust.h"
 #include "gstmotiontemplate.h"
 #include "gstlkopticalflow.h"
+#include "gstobjectstracker.h"
 #include "gstpyramidsegment.h"
 #include "gsttemplatematch.h"
 #include "gsttracker.h"
@@ -58,6 +59,9 @@ plugin_init (GstPlugin * plugin)
     return FALSE;
 
   if (!gst_lkopticalflow_plugin_init (plugin))
+    return FALSE;
+
+  if (!gst_objectstracker_plugin_init (plugin))
     return FALSE;
 
   if (!gst_pyramidsegment_plugin_init (plugin))

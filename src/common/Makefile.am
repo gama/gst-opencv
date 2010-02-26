@@ -7,6 +7,7 @@ libgstcommon_la_SOURCES =								\
 	condensation.c										\
 	draw.c                                              \
 	identifier_motion.c									\
+	surf.c          									\
 	$(NULL)
 
 # flags used to compile this plugin
@@ -30,4 +31,5 @@ noinst_HEADERS = 										\
 	condensation.h										\
 	draw.h                                              \
 	identifier_motion.h									\
+	surf.h                                              \
 	$(NULL)
