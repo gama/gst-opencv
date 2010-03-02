@@ -460,6 +460,7 @@ gst_objectstracker_chain(GstPad *pad, GstBuffer *buf) {
                 GstMessage *message;
                 GstStructure *structure;
                 structure = gst_structure_new("object-tracking",
+                        "id", G_TYPE_UINT, object.id,
                         "x", G_TYPE_UINT, rect.x,
                         "y", G_TYPE_UINT, rect.y,
                         "width", G_TYPE_UINT, rect.width,
