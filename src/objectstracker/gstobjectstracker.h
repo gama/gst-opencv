@@ -97,6 +97,7 @@ struct _GstObjectsTracker
 
     gboolean            verbose;
     gboolean            display;
+    gboolean            display_features;
 
     int                 frames_processed;
     int                 static_count_objects;

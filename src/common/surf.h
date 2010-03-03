@@ -33,7 +33,8 @@ void     findPairs              (const CvSeq  *objectKeypoints,
 
 CvSeq    *getMatchPoints        (const CvSeq  *src,
                                  const GArray *pairs,
-                                 const int     PAIR_A_0__PAIR_B_1);
+                                 const int     PAIR_A_0__PAIR_B_1,
+                                 CvMemStorage *mem_storage);
 
 CvPoint  surfCentroid           (const CvSeq  *seq,
                                  CvPoint       pt_displacement);

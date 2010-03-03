@@ -80,7 +80,8 @@ GST_DEBUG_CATEGORY_STATIC(gst_objectstracker_debug);
 enum {
     PROP_0,
     PROP_VERBOSE,
-    PROP_DISPLAY
+    PROP_DISPLAY,
+    PROP_DISPLAY_FEATURES
 };
 
 // the capabilities of the inputs and outputs.
@@ -148,7 +149,11 @@ gst_objectstracker_class_init(GstObjectsTrackerClass *klass) {
             FALSE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_DISPLAY,
-            g_param_spec_boolean("display", "Display", "Highligh the metrixed faces in the video output",
+            g_param_spec_boolean("display", "Display", "Highligh the objects trackers in the video output",
+            FALSE, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_DISPLAY_FEATURES,
+            g_param_spec_boolean("display-features", "Display features", "Print in the video output the objects features",
             FALSE, G_PARAM_READWRITE));
 }
 
@@ -172,6 +177,7 @@ gst_objectstracker_init(GstObjectsTracker *filter, GstObjectsTrackerClass *gclas
 
     filter->verbose = FALSE;
     filter->display = FALSE;
+    filter->display_features = FALSE;
     filter->params = cvSURFParams(100, 1);
     filter->static_count_objects = 0;
     filter->frames_processed = 0;
@@ -191,6 +197,9 @@ gst_objectstracker_set_property(GObject *object, guint prop_id, const GValue *va
         case PROP_DISPLAY:
             filter->display = g_value_get_boolean(value);
             break;
+        case PROP_DISPLAY_FEATURES:
+            filter->display_features = g_value_get_boolean(value);
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
             break;
@@ -207,6 +216,9 @@ gst_objectstracker_get_property(GObject *object, guint prop_id, GValue *value, G
             break;
         case PROP_DISPLAY:
             g_value_set_boolean(value, filter->display);
+            break;
+        case PROP_DISPLAY_FEATURES:
+            g_value_set_boolean(value, filter->display_features);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -289,6 +301,7 @@ gst_objectstracker_chain(GstPad *pad, GstBuffer *buf) {
                     surf_image_descriptors,
                     pairs);
 
+            // if match, update object
             if (pairs->len && (float) pairs->len / object->surf_object_descriptors->total >= MIN_MATCH_OBJECT) {
 
                 object->range_viewed++;
@@ -297,17 +310,15 @@ gst_objectstracker_chain(GstPad *pad, GstBuffer *buf) {
 
                 if (object->surf_object_keypoints_last_match != NULL)
                     cvClearSeq(object->surf_object_keypoints_last_match);
-                object->surf_object_keypoints_last_match = getMatchPoints(object->surf_object_keypoints, pairs, 0);
+                object->surf_object_keypoints_last_match = getMatchPoints(surf_image_keypoints, pairs, 1, object->mem_storage);
 
                 if (object->surf_object_descriptors_last_match != NULL)
                     cvClearSeq(object->surf_object_descriptors_last_match);
-                object->surf_object_descriptors_last_match = getMatchPoints(object->surf_object_descriptors, pairs, 0);
+                object->surf_object_descriptors_last_match = getMatchPoints(surf_image_descriptors, pairs, 1, object->mem_storage);
 
-            }
-
-            // Estimate haar ract to objects localized
-            if (object->timestamp == timestamp)
+                // Estimate rect of objects localized
                 object->rect_estimated = rectDisplacement(object->surf_object_keypoints, surf_image_keypoints, pairs, object->rect);
+            }
 
             g_array_free(pairs, TRUE);
         }
@@ -326,17 +337,16 @@ gst_objectstracker_chain(GstPad *pad, GstBuffer *buf) {
             if ((filter->frames_processed - object->last_frame_viewed > DELOBJ_NFRAMES_IS_OLD) ||
                     (filter->frames_processed != object->last_frame_viewed && object->range_viewed < DELOBJ_COMBOFRAMES_IS_IRRELEVANT)
                     ) {
-                cvClearSeq(object->surf_object_keypoints);
-                cvClearSeq(object->surf_object_descriptors);
-                cvClearSeq(object->surf_object_keypoints_last_match);
-                cvClearSeq(object->surf_object_descriptors_last_match);
+                if (object->surf_object_keypoints != NULL) cvClearSeq(object->surf_object_keypoints);
+                if (object->surf_object_descriptors != NULL) cvClearSeq(object->surf_object_descriptors);
+                if (object->surf_object_keypoints_last_match != NULL) cvClearSeq(object->surf_object_keypoints_last_match);
+                if (object->surf_object_descriptors_last_match != NULL) cvClearSeq(object->surf_object_descriptors_last_match);
                 cvReleaseMemStorage(&object->mem_storage);
                 g_array_remove_index_fast(filter->stored_objects, k);
             }
         }
 
     }// if any object exist
-
 
 
     // Process all haar rects
@@ -354,20 +364,10 @@ gst_objectstracker_chain(GstPad *pad, GstBuffer *buf) {
                 InstanceObject *object;
                 object = &g_array_index(filter->stored_objects, InstanceObject, j);
 
-                CvRect rect_match_points = surfPointsBoundingRect(object->surf_object_keypoints_last_match);
-                rect_match_points.x += object->rect.x;
-                rect_match_points.y += object->rect.y;
-
-                if ((object->timestamp == timestamp
-                        ) && (
-                        rectIntercept(&rect_match_points, &rect) >= PERC_RECT_TO_SAME_OBJECT ||
-                        rectIntercept(&rect, &rect_match_points) >= PERC_RECT_TO_SAME_OBJECT
-                        ) && (
-                        rectIntercept(&object->rect, &rect) >= PERC_RECT_TO_SAME_OBJECT ||
-                        rectIntercept(&rect, &object->rect) >= PERC_RECT_TO_SAME_OBJECT ||
-                        rectIntercept(&object->rect_estimated, &rect) >= PERC_RECT_TO_SAME_OBJECT ||
-                        rectIntercept(&rect, &object->rect_estimated) >= PERC_RECT_TO_SAME_OBJECT
-                        )) {
+                // It is considered equal if the "centroid match features" is inner
+                // haar rect AND max area deviation is PERC_RECT_TO_SAME_OBJECT
+                if (pointIntoRect(rect, (object->surf_object_keypoints_last_match != NULL) ? surfCentroid(object->surf_object_keypoints_last_match, cvPoint(0, 0)) : surfCentroid(object->surf_object_keypoints, cvPoint(0, 0)))
+                        && ((float) MIN((object->rect.width * object->rect.height), (rect.width * rect.height)) / (float) MAX((object->rect.width * object->rect.height), (rect.width * rect.height)) >= PERC_RECT_TO_SAME_OBJECT)) {
 
                     // Update the object features secound the new body rect
                     cvSetImageROI(filter->gray, rect);
@@ -379,7 +379,7 @@ gst_objectstracker_chain(GstPad *pad, GstBuffer *buf) {
                             filter->params,
                             0);
                     cvResetImageROI(filter->gray);
-                    object->rect = rect;
+                    object->rect = object->rect_estimated = rect;
                     object->last_body_identify_timestamp = timestamp;
                     break;
                 }
@@ -408,10 +408,10 @@ gst_objectstracker_chain(GstPad *pad, GstBuffer *buf) {
                     object.id = filter->static_count_objects++;
                     object.last_frame_viewed = filter->frames_processed;
                     object.range_viewed = 1;
-                    object.rect = rect;
+                    object.rect = object.rect_estimated = rect;
                     object.timestamp = object.last_body_identify_timestamp = timestamp;
-                    object.surf_object_keypoints_last_match = cvCloneSeq(object.surf_object_keypoints, NULL);
-                    object.surf_object_descriptors_last_match = cvCloneSeq(object.surf_object_descriptors, NULL);
+                    object.surf_object_keypoints_last_match = NULL;
+                    object.surf_object_descriptors_last_match = NULL;
 
                     g_array_append_val(filter->stored_objects, object);
                 }
@@ -437,8 +437,10 @@ gst_objectstracker_chain(GstPad *pad, GstBuffer *buf) {
 
                 if (filter->verbose) {
                     GST_INFO("[object #%d rect] x: %d, y: %d, width: %d, height: %d\n", object.id, rect.x, rect.y, rect.width, rect.height);
-                    drawSurfPoints(object.surf_object_keypoints, cvPoint(object.rect.x, object.rect.y), filter->image, PRINT_COLOR, 0);
-                    drawSurfPoints(object.surf_object_keypoints_last_match, cvPoint(object.rect.x, object.rect.y), filter->image, PRINT_COLOR, 1);
+                }
+
+                if (filter->display_features) {
+                    drawSurfPoints(object.surf_object_keypoints_last_match, cvPoint(0, 0), filter->image, PRINT_COLOR, 1);
                 }
 
                 if (filter->display) {
@@ -450,7 +452,7 @@ gst_objectstracker_chain(GstPad *pad, GstBuffer *buf) {
                             8, 0);
                     char *label;
                     float font_scaling = ((filter->image->width * filter->image->height) > (320 * 240)) ? 0.5f : 0.3f;
-                    label = g_strdup_printf("OBJ#%i (%1.2f%%)", object.id, (float) object.surf_object_descriptors_last_match->total / object.surf_object_descriptors->total);
+                    label = g_strdup_printf("OBJ#%i (%i%%)", object.id, (!object.surf_object_descriptors_last_match) ? 100 : 100 * object.surf_object_descriptors_last_match->total / object.surf_object_descriptors->total);
                     printText(filter->image, cvPoint(rect.x + (rect.width / 2), rect.y + (rect.height / 2)), label, PRINT_COLOR, font_scaling, 1);
                     g_free(label);
                 }

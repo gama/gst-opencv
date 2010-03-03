@@ -52,40 +52,31 @@ int naiveNearestNeighbor(const float* vec,
     return -1;
 }
 
-gint sort_report_entry_b(gconstpointer _a, gconstpointer _b) {
-    const IntPair *a = _a;
-    const IntPair *b = _b;
-    if (a->b < b->b) return -1;
-    return 1;
-}
-
-gint sort_report_entry_a(gconstpointer _a, gconstpointer _b) {
-    const IntPair *a = _a;
-    const IntPair *b = _b;
-    if (a->a < b->a) return -1;
-    return 1;
-}
-
 CvSeq * getMatchPoints(const CvSeq *src,
         const GArray *pairs,
-        const int PAIR_A_0__PAIR_B_1) {
-
-    if (!PAIR_A_0__PAIR_B_1) g_array_sort(pairs, sort_report_entry_a);
-    else g_array_sort(pairs, sort_report_entry_b);
+        const int PAIR_A_0__PAIR_B_1,
+        CvMemStorage *mem_storage) {
 
     CvSeq *dst;
-    dst = cvCloneSeq(src, NULL);
+    dst = cvCloneSeq(src, mem_storage);
 
-    int i, j;
-    for (i = pairs->len - 1, j = dst->total - 1; j >= 0;) {
-        IntPair pair = g_array_index(pairs, IntPair, i);
-        int idx = (!PAIR_A_0__PAIR_B_1) ? pair.a : pair.b;
+    int m, n, idx, find;
+    for (m = dst->total - 1; m >= 0; --m) {
 
-        if (idx != j || i < 0) cvSeqRemove(dst, j);
-        else --i;
+        find = 0;
+        for (n = 0; n < pairs->len; ++n) {
+            IntPair pair = g_array_index(pairs, IntPair, n);
+            idx = (!PAIR_A_0__PAIR_B_1) ? pair.a : pair.b;
 
-        --j;
+            if (idx == m) {
+                find = 1;
+                break;
+            }
+        }
+
+        if (!find) cvSeqRemove(dst, m);
     }
+
     return dst;
 }
 
@@ -94,6 +85,8 @@ void drawSurfPoints(const CvSeq *seq,
         IplImage *img,
         CvScalar color,
         int NOMARK0_MARK1) {
+
+    if (seq == NULL || !seq->total) return;
 
     int i;
     CvPoint point;
@@ -112,20 +105,24 @@ CvPoint surfCentroid(const CvSeq *seq,
     CvPoint point;
     point.x = point.y = 0;
 
-    int i;
-    for (i = 0; i < seq->total; ++i) {
-        CvSURFPoint* r = (CvSURFPoint*) cvGetSeqElem(seq, i);
-        point.x += cvPointFrom32f(r->pt).x + pt_displacement.x;
-        point.y += cvPointFrom32f(r->pt).y + pt_displacement.y;
-    }
+    if (seq != NULL) {
+        int i;
+        for (i = 0; i < seq->total; ++i) {
+            CvSURFPoint* r = (CvSURFPoint*) cvGetSeqElem(seq, i);
+            point.x += cvPointFrom32f(r->pt).x + pt_displacement.x;
+            point.y += cvPointFrom32f(r->pt).y + pt_displacement.y;
+        }
 
-    point.x /= seq->total;
-    point.y /= seq->total;
+        point.x /= seq->total;
+        point.y /= seq->total;
+    }
 
     return point;
 }
 
 CvRect surfPointsBoundingRect(const CvSeq *seq) {
+
+    if (seq == NULL || !seq->total) return cvRect(-1, -1, -1, -1);
 
     CvPoint point_min, point_max;
 
@@ -145,65 +142,33 @@ CvRect surfPointsBoundingRect(const CvSeq *seq) {
     return cvRect(point_min.x, point_min.y, point_max.x - point_min.x, point_max.y - point_min.y);
 }
 
-/*
-// Surf centroid with index
-CvPoint surfCentroid(const CvSeq *seq,
-       CvPoint pt_displacement,
-       GArray *pairs,
-       const int PAIR_OFF_0__PAIR_A_1__PAIR_B_2) {
-
-   CvPoint point;
-   point.x = point.y = -1;
-
-   if (seq == NULL || seq->total <= 0 || (PAIR_OFF_0__PAIR_A_1__PAIR_B_2 && (pairs == NULL || pairs->len <= 0)))
-       return point;
-
-   point.x = point.y = 0;
-
-   int i;
-   int size = (PAIR_OFF_0__PAIR_A_1__PAIR_B_2) ? pairs->len : seq->total;
-   for (i = 0; i < size; ++i) {
-
-       int idx;
-       if (PAIR_OFF_0__PAIR_A_1__PAIR_B_2) {
-           IntPair pair = g_array_index(pairs, IntPair, i);
-           idx = (PAIR_OFF_0__PAIR_A_1__PAIR_B_2 == 2) ? pair.b : pair.a;
-       } else {
-           idx = i;
-       }
-
-       CvSURFPoint* r = (CvSURFPoint*) cvGetSeqElem(seq, idx);
-
-       point.x += cvPointFrom32f(r->pt).x + pt_displacement.x;
-       point.y += cvPointFrom32f(r->pt).y + pt_displacement.y;
-   }
-
-   point.x /= size;
-   point.y /= size;
-
-   return point;
-}
- */
-
-
 CvRect rectDisplacement(const CvSeq* objectKeypoints,
         const CvSeq* imageKeypoints,
         const GArray* pairs,
         const CvRect objectRect) {
 
-    CvSeq* obj;
-    CvSeq* img;
-    obj = cvCloneSeq(objectKeypoints, NULL);
-    img = cvCloneSeq(imageKeypoints, NULL);
-    obj = getMatchPoints(obj, pairs, 0);
-    img = getMatchPoints(img, pairs, 1);
-    CvPoint p_obj = surfCentroid(obj, cvPoint(objectRect.x, objectRect.y));
-    CvPoint p_img = surfCentroid(img, cvPoint(0, 0));
-    cvClearSeq(obj);
-    cvClearSeq(img);
+    CvPoint point_obj, point_img;
+    point_obj.x = point_obj.y = point_img.x = point_img.y = 0;
 
-    return cvRect(objectRect.x + p_img.x - p_obj.x, objectRect.y + p_img.y - p_obj.y, objectRect.width, objectRect.height);
+    if (pairs->len) {
+        int n;
+        for (n = 0; n < pairs->len; ++n) {
+            IntPair pair = g_array_index(pairs, IntPair, n);
+            CvSURFPoint* s_point_obj = (CvSURFPoint*) cvGetSeqElem(objectKeypoints, pair.a);
+            CvSURFPoint* s_point_img = (CvSURFPoint*) cvGetSeqElem(imageKeypoints, pair.b);
+            point_obj.x += cvPointFrom32f(s_point_obj->pt).x;
+            point_obj.y += cvPointFrom32f(s_point_obj->pt).y;
+            point_img.x += cvPointFrom32f(s_point_img->pt).x;
+            point_img.y += cvPointFrom32f(s_point_img->pt).y;
+        }
 
+        point_obj.x /= pairs->len;
+        point_obj.y /= pairs->len;
+        point_img.x /= pairs->len;
+        point_img.y /= pairs->len;
+    }
+
+    return cvRect(point_img.x - point_obj.x, point_img.y - point_obj.y, objectRect.width, objectRect.height);
 }
 
 void findPairs(const CvSeq* objectKeypoints,
