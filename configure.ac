@@ -160,6 +160,7 @@ AC_OUTPUT([
     src/haaradjust/Makefile
     src/haardetect/Makefile
     src/lkopticalflow/Makefile
+    src/objectsareainteraction/Makefile
     src/objectsinteraction/Makefile
     src/objectstracker/Makefile
     src/motiontemplate/Makefile
