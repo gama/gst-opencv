@@ -317,7 +317,7 @@ gst_objectstracker_chain(GstPad *pad, GstBuffer *buf) {
                 object->surf_object_descriptors_last_match = getMatchPoints(surf_image_descriptors, pairs, 1, object->mem_storage);
 
                 // Estimate rect of objects localized
-                object->rect_estimated = rectDisplacement(object->surf_object_keypoints, surf_image_keypoints, pairs, object->rect);
+                object->rect_estimated = rectDisplacement(object->surf_object_keypoints, surf_image_keypoints, pairs, object->rect, PAIRS_PERC_CONSIDERATE);
             }
 
             g_array_free(pairs, TRUE);

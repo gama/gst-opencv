@@ -61,6 +61,7 @@ G_BEGIN_DECLS
 #define GST_IS_OBJECTSTRACKER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OBJECTSTRACKER))
 
 #define PERC_RECT_TO_SAME_OBJECT           .6
+#define PAIRS_PERC_CONSIDERATE             .6
 #define PRINT_COLOR                        CV_RGB(205, 85, 85)
 #define MIN_MATCH_OBJECT                   .15
 #define DELOBJ_NFRAMES_IS_OLD              10

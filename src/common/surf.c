@@ -142,30 +142,75 @@ CvRect surfPointsBoundingRect(const CvSeq *seq) {
     return cvRect(point_min.x, point_min.y, point_max.x - point_min.x, point_max.y - point_min.y);
 }
 
+gint sortDoubleArray(gconstpointer a, gconstpointer b) {
+    if (*(double *) a < *(double *) b) return -1;
+    else if (*(double *) a > *(double *) b) return 1;
+    else return 0;
+}
+
 CvRect rectDisplacement(const CvSeq* objectKeypoints,
         const CvSeq* imageKeypoints,
         const GArray* pairs,
-        const CvRect objectRect) {
+        const CvRect objectRect,
+        const float pairs_perc_considerate) {
+
+    int n;
+    double lim;
+
+    // Calculates the maximum acceptable displacement feature
+    if (pairs->len && pairs->len >= 2) {
+        GArray *dists;
+        dists = g_array_new(FALSE, FALSE, sizeof (double));
+        for (n = 0; n < pairs->len; ++n) {
+            IntPair pair = g_array_index(pairs, IntPair, n);
+            CvSURFPoint* s_point_obj = (CvSURFPoint*) cvGetSeqElem(objectKeypoints, pair.a);
+            CvSURFPoint* s_point_img = (CvSURFPoint*) cvGetSeqElem(imageKeypoints, pair.b);
+            int x1 = cvPointFrom32f(s_point_obj->pt).x + objectRect.x;
+            int y1 = cvPointFrom32f(s_point_obj->pt).y + objectRect.y;
+            int x2 = cvPointFrom32f(s_point_img->pt).x;
+            int y2 = cvPointFrom32f(s_point_img->pt).y;
+            double d = sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2));
+            g_array_append_val(dists, d);
+        }
+        g_array_sort(dists, sortDoubleArray);
+        int idx = (int) dists->len*pairs_perc_considerate;
+        lim = g_array_index(dists, double, idx);
+    }
+
+    int real_size = 0;
 
     CvPoint point_obj, point_img;
     point_obj.x = point_obj.y = point_img.x = point_img.y = 0;
 
     if (pairs->len) {
-        int n;
+
         for (n = 0; n < pairs->len; ++n) {
             IntPair pair = g_array_index(pairs, IntPair, n);
             CvSURFPoint* s_point_obj = (CvSURFPoint*) cvGetSeqElem(objectKeypoints, pair.a);
             CvSURFPoint* s_point_img = (CvSURFPoint*) cvGetSeqElem(imageKeypoints, pair.b);
+
+            // compare with maximum acceptable displacement feature
+            if (pairs->len >= 2) {
+                int x1 = cvPointFrom32f(s_point_obj->pt).x + objectRect.x;
+                int y1 = cvPointFrom32f(s_point_obj->pt).y + objectRect.y;
+                int x2 = cvPointFrom32f(s_point_img->pt).x;
+                int y2 = cvPointFrom32f(s_point_img->pt).y;
+                double d = sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2));
+                if (d > lim) continue;
+            }
+
             point_obj.x += cvPointFrom32f(s_point_obj->pt).x;
             point_obj.y += cvPointFrom32f(s_point_obj->pt).y;
             point_img.x += cvPointFrom32f(s_point_img->pt).x;
             point_img.y += cvPointFrom32f(s_point_img->pt).y;
+
+            real_size++;
         }
 
-        point_obj.x /= pairs->len;
-        point_obj.y /= pairs->len;
-        point_img.x /= pairs->len;
-        point_img.y /= pairs->len;
+        point_obj.x /= real_size;
+        point_obj.y /= real_size;
+        point_img.x /= real_size;
+        point_img.y /= real_size;
     }
 
     return cvRect(point_img.x - point_obj.x, point_img.y - point_obj.y, objectRect.width, objectRect.height);

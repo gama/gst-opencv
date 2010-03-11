@@ -48,7 +48,8 @@ void     drawSurfPoints         (const CvSeq  *seq,
 CvRect   rectDisplacement       (const CvSeq  *objectKeypoints,
                                  const CvSeq  *imageKeypoints,
                                  const GArray *pairs,
-                                 const CvRect  objectRect);
+                                 const CvRect  objectRect,
+                                 const float   pairs_perc_considerate);
 
 CvRect   surfPointsBoundingRect (const CvSeq  *seq);
 
