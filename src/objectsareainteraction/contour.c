@@ -43,7 +43,7 @@ void makeContour(const gchar *str, CvSeq **seq, CvMemStorage* storage) {
     return;
 }
 
-void calcInterception(const InstanceObjectAreaContour *a, const InstanceObjectAreaContour *b, InstanceObjectAreaContourResult *dst) {
+void calcInterception(const InstanceObjectAreaContour *a, const InstanceObjectAreaContour *b, InstanceObjectAreaContour *dst) {
 
     dst->contour = NULL;
 
@@ -67,12 +67,5 @@ void calcInterception(const InstanceObjectAreaContour *a, const InstanceObjectAr
         dst->contour = cvFindNextContour(scanner);
         cvReleaseImage(&img_a);
         cvReleaseImage(&img_b);
-
-        if(dst->contour != NULL){
-            dst->id_a = a->id;
-            dst->id_b = b->id;
-            dst->perc_a = (gdouble) cvContourArea(dst->contour, CV_WHOLE_SEQ) / cvContourArea(a->contour, CV_WHOLE_SEQ);
-            dst->perc_b = (gdouble) cvContourArea(dst->contour, CV_WHOLE_SEQ) / cvContourArea(b->contour, CV_WHOLE_SEQ);
-        }
     }
 }

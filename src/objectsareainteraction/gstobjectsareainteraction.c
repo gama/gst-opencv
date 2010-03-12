@@ -268,20 +268,28 @@ gst_objectsareainteraction_set_caps(GstPad *pad, GstCaps *caps) {
 
     // Set settled contours
     if (filter->contours != NULL) {
-        gchar **str_pt = NULL;
-        str_pt = g_strsplit(filter->contours, "-", -1);
-        gint ln = 0;
-        while (str_pt[ln]) {
-            if (strlen(str_pt[ln]) > 1) {
-                InstanceObjectAreaContour contour_temp;
-                contour_temp.mem_storage = cvCreateMemStorage(0);
-                makeContour(str_pt[ln], &contour_temp.contour, contour_temp.mem_storage);
-                contour_temp.id = ln;
-                g_array_append_val(filter->contours_area_settled, contour_temp);
-            }
-            ln++;
+        gchar **str_area = NULL;
+        str_area = g_strsplit(filter->contours, "-", -1);
+        g_assert(str_area);
+
+        gint i;
+        for(i = 0; str_area[i]; ++i){
+
+            gchar **str_labelpts = NULL;
+            str_labelpts = g_strsplit(str_area[i], ":", 2);
+            g_assert(str_labelpts[0] && str_labelpts[1]);
+
+            InstanceObjectAreaContour contour_temp;
+            contour_temp.mem_storage = cvCreateMemStorage(0);
+            makeContour(str_labelpts[1], &contour_temp.contour, contour_temp.mem_storage);
+            contour_temp.id = i;
+            contour_temp.name = g_strdup_printf(str_labelpts[0]);
+            g_array_append_val(filter->contours_area_settled, contour_temp);
+
+            g_strfreev(str_labelpts);
         }
-        g_strfreev(str_pt);
+
+        g_strfreev(str_area);
     }
 
     return gst_pad_set_caps(other_pad, caps);
@@ -333,35 +341,36 @@ gst_objectsareainteraction_chain(GstPad *pad, GstBuffer *buf) {
                     cvDrawContours(filter->image, obj_in->contour, PRINT_COLOR_OBJCONTOUR, PRINT_COLOR_OBJCONTOUR, 0, PRINT_LINE_SIZE_OBJCONTOUR, 8, cvPoint(0, 0));
 
                 // Process the interception contour
-                InstanceObjectAreaContourResult contour_interception;
+                InstanceObjectAreaContour contour_interception;
                 contour_interception.mem_storage = cvCreateMemStorage(0);
                 calcInterception(obj_settled, obj_in, &contour_interception);
                 if (contour_interception.contour != NULL) {
 
                     CvRect rect = cvBoundingRect(contour_interception.contour, 1);
-                    int interception = (int) (contour_interception.perc_b * 100);
+                    int interception = (int)(((gdouble) cvContourArea(contour_interception.contour, CV_WHOLE_SEQ) / cvContourArea(obj_in->contour, CV_WHOLE_SEQ))*100);
 
                     if (filter->display) {
                         cvDrawContours(filter->image, contour_interception.contour, PRINT_COLOR_INTCONTOUR, PRINT_COLOR_INTCONTOUR, 0, PRINT_LINE_SIZE_INTCONTOUR, 8, cvPoint(0, 0));
                         char *label;
                         float font_scaling = ((filter->image->width * filter->image->height) > (320 * 240)) ? 0.5f : 0.3f;
-                        label = g_strdup_printf("OBJ#%i in AREA#%i (%i%%)", obj_in->id, obj_settled->id, interception);
-                        printText(filter->image, cvPoint(rect.x + (rect.width / 2), rect.y + (rect.height / 2)), label, PRINT_COLOR_AREACONTOUR, font_scaling, 1);
+                        label = g_strdup_printf("OBJ#%i in '%s' (%i%%)", obj_in->id, obj_settled->name, interception);
+                        printText(filter->image, cvPoint(rect.x + (rect.width / 2), rect.y + (rect.height / 2)), label, PRINT_COLOR_INTCONTOUR, font_scaling, 1);
                         g_free(label);
                     }
 
-                    if (filter->verbose)
-                        GST_INFO("OBJ#%i in AREA#%i (%i%%): rect(%i, %i, %i, %i)\n",
-                            obj_in->id, obj_settled->id, interception,
+                    if (filter->verbose){
+                        GST_INFO("OBJ#%i in '%s' (%i%%): rect(%i, %i, %i, %i)\n",
+                            obj_in->id, obj_settled->name, interception,
                             rect.x, rect.y, rect.width, rect.height);
+                    }
 
                     // Send downstream event and bus message with the rect info
                     GstEvent *event;
                     GstMessage *message;
                     GstStructure *structure;
                     structure = gst_structure_new("object-areainteraction",
-                            "obj_in", G_TYPE_UINT, obj_in->id,
-                            "obj_settled", G_TYPE_UINT, obj_settled->id,
+                            "obj_in_id", G_TYPE_UINT, obj_in->id,
+                            "obj_settled_name", G_TYPE_STRING, obj_settled->name,
                             "percentage", G_TYPE_UINT, interception,
                             "x", G_TYPE_UINT, rect.x,
                             "y", G_TYPE_UINT, rect.y,
@@ -437,10 +446,10 @@ gboolean events_cb(GstPad *pad, GstEvent *event, gpointer user_data) {
         contour_temp.mem_storage = cvCreateMemStorage(0);
         contour_temp.contour = cvCloneSeq(cvPointSeqFromMat(CV_SEQ_KIND_CURVE + CV_SEQ_FLAG_CLOSED, vector, &header, &block), contour_temp.mem_storage);
 
+        g_array_append_val(filter->contours_area_in, contour_temp);
+
         if (timestamp > filter->timestamp)
             filter->timestamp = timestamp;
-
-        g_array_append_val(filter->contours_area_in, contour_temp);
     }
 
     return TRUE;
