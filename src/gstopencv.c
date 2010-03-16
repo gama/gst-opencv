@@ -33,8 +33,8 @@
 #include "gstlkopticalflow.h"
 #include "gstobjectsareainteraction.h"
 #include "gstobjectsinteraction.h"
-#include "gstobjectstracker.h"
 #include "gstpyramidsegment.h"
+#include "gstsurftracker.h"
 #include "gsttemplatematch.h"
 #include "gsttracker.h"
 
@@ -69,10 +69,10 @@ plugin_init (GstPlugin * plugin)
   if (!gst_objectsinteraction_plugin_init (plugin))
     return FALSE;
 
-  if (!gst_objectstracker_plugin_init (plugin))
+  if (!gst_pyramidsegment_plugin_init (plugin))
     return FALSE;
 
-  if (!gst_pyramidsegment_plugin_init (plugin))
+  if (!gst_surf_tracker_plugin_init (plugin))
     return FALSE;
 
   if (!gst_templatematch_plugin_init (plugin))

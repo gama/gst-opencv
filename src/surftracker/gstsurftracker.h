@@ -44,8 +44,8 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_OBJECTSTRACKER_H__
-#define __GST_OBJECTSTRACKER_H__
+#ifndef __GST_SURF_TRACKER_H__
+#define __GST_SURF_TRACKER_H__
 
 #include <gst/gst.h>
 #include <cv.h>
@@ -54,11 +54,11 @@
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_OBJECTSTRACKER            (gst_objectstracker_get_type())
-#define GST_OBJECTSTRACKER(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_OBJECTSTRACKER,GstObjectsTracker))
-#define GST_OBJECTSTRACKER_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_OBJECTSTRACKER,GstObjectsTrackerClass))
-#define GST_IS_OBJECTSTRACKER(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OBJECTSTRACKER))
-#define GST_IS_OBJECTSTRACKER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OBJECTSTRACKER))
+#define GST_TYPE_SURF_TRACKER            (gst_surf_tracker_get_type())
+#define GST_SURF_TRACKER(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_SURF_TRACKER,GstSURFTracker))
+#define GST_SURF_TRACKER_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_SURF_TRACKER,GstSURFTrackerClass))
+#define GST_IS_SURF_TRACKER(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SURF_TRACKER))
+#define GST_IS_SURF_TRACKER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SURF_TRACKER))
 
 #define PERC_RECT_TO_SAME_OBJECT           .6
 #define PAIRS_PERC_CONSIDERATE             .6
@@ -68,8 +68,8 @@ G_BEGIN_DECLS
 #define DELOBJ_COMBOFRAMES_IS_IRRELEVANT   3
 
 typedef struct _InstanceObject InstanceObject;
-typedef struct _GstObjectsTracker GstObjectsTracker;
-typedef struct _GstObjectsTrackerClass GstObjectsTrackerClass;
+typedef struct _GstSURFTracker GstSURFTracker;
+typedef struct _GstSURFTrackerClass GstSURFTrackerClass;
 
 struct _InstanceObject
 {
@@ -87,7 +87,7 @@ struct _InstanceObject
     GstClockTime        last_body_identify_timestamp;
 };
 
-struct _GstObjectsTracker
+struct _GstSURFTracker
 {
     GstElement          element;
     IplImage           *image;
@@ -108,14 +108,14 @@ struct _GstObjectsTracker
     GArray             *stored_objects;
 };
 
-struct _GstObjectsTrackerClass
+struct _GstSURFTrackerClass
 {
     GstElementClass parent_class;
 };
 
-GType    gst_objectstracker_get_type    (void);
-gboolean gst_objectstracker_plugin_init (GstPlugin *plugin);
+GType    gst_surf_tracker_get_type    (void);
+gboolean gst_surf_tracker_plugin_init (GstPlugin *plugin);
 
 G_END_DECLS
 
-#endif /* __GST_OBJECTSTRACKER_H__ */
+#endif /* __GST_SURF_TRACKER_H__ */

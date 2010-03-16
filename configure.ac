@@ -160,11 +160,11 @@ AC_OUTPUT([
     src/haaradjust/Makefile
     src/haardetect/Makefile
     src/lkopticalflow/Makefile
+    src/motiontemplate/Makefile
     src/objectsareainteraction/Makefile
     src/objectsinteraction/Makefile
-    src/objectstracker/Makefile
-    src/motiontemplate/Makefile
     src/pyramidsegment/Makefile
+    src/surftracker/Makefile
     src/templatematch/Makefile
     src/tracker/Makefile
 ])

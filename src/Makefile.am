@@ -12,8 +12,8 @@ SUBDIRS =                                                                       
 	lkopticalflow                                                                   \
 	objectsareainteraction                                                          \
 	objectsinteraction                                                              \
-	objectstracker                                                                  \
 	pyramidsegment                                                                  \
+	surftracker                                                                     \
 	templatematch                                                                   \
 	tracker                                                                         \
 	$(NULL)
@@ -36,9 +36,9 @@ libgstopencv_la_CFLAGS =                                                        
 	-I${top_srcdir}/src/motiontemplate                                              \
 	-I${top_srcdir}/src/lkopticalflow                                               \
 	-I${top_srcdir}/src/objectsareainteraction                                      \
-	-I${top_srcdir}/src/objectsinteraction                                      	\
-	-I${top_srcdir}/src/objectstracker                                              \
+	-I${top_srcdir}/src/objectsinteraction                                          \
 	-I${top_srcdir}/src/pyramidsegment                                              \
+	-I${top_srcdir}/src/surftracker                                                 \
 	-I${top_srcdir}/src/templatematch                                               \
 	-I${top_srcdir}/src/tracker                                                     \
 	$(GST_CFLAGS)                                                                   \
@@ -56,10 +56,10 @@ libgstopencv_la_LIBADD =                                                        
 	$(top_builddir)/src/haardetect/libgsthaardetect.la                              \
 	$(top_builddir)/src/motiontemplate/libgstmotiontemplate.la                      \
 	$(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la                        \
-	$(top_builddir)/src/objectstracker/libgstobjectstracker.la                      \
 	$(top_builddir)/src/objectsareainteraction/libgstobjectsareainteraction.la      \
 	$(top_builddir)/src/objectsinteraction/libgstobjectsinteraction.la              \
 	$(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la                      \
+	$(top_builddir)/src/surftracker/libgstsurftracker.la                            \
 	$(top_builddir)/src/templatematch/libgsttemplatematch.la                        \
 	$(top_builddir)/src/tracker/libgsttracker.la                                    \
 	$(GST_LIBS)                                                                     \
@@ -81,6 +81,7 @@ libgstopencv_la_DEPENDENCIES =                                                  
 	$(top_builddir)/src/objectsareainteraction/libgstobjectsareainteraction.la      \
 	$(top_builddir)/src/objectsinteraction/libgstobjectsinteraction.la              \
 	$(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la                      \
+	$(top_builddir)/src/surftracker/libgstsurftracker.la                            \
 	$(top_builddir)/src/templatematch/libgsttemplatematch.la                        \
 	$(top_builddir)/src/tracker/libgsttracker.la                                    \
 	$(NULL)
