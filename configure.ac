@@ -29,8 +29,8 @@ AM_CONFIG_HEADER(config.h)
 
 dnl check for tools
 AC_PROG_CC
+AC_PROG_CXX
 AC_PROG_LIBTOOL
-
 
 dnl decide on error flags
 AS_COMPILER_FLAG(-Wall, GST_WALL="yes", GST_WALL="no")
@@ -152,6 +152,7 @@ AC_OUTPUT([
     Makefile
     m4/Makefile
     src/Makefile
+    src/bgfgacmmm2003/Makefile
     src/bgfgcodebook/Makefile
     src/common/Makefile
     src/edgedetect/Makefile

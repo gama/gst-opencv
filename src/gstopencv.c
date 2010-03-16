@@ -23,6 +23,7 @@
 #include "config.h"
 #endif
 
+#include "gstbgfgacmmm2003.h"
 #include "gstbgfgcodebook.h"
 #include "gstedgedetect.h"
 #include "gstfaceblur.h"
@@ -41,6 +42,9 @@
 static gboolean
 plugin_init (GstPlugin * plugin)
 {
+
+  if (!gst_bgfg_acmmm2003_plugin_init (plugin))
+    return FALSE;
 
   if (!gst_bgfg_codebook_plugin_init (plugin))
     return FALSE;
