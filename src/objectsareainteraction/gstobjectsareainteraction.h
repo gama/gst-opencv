@@ -47,10 +47,11 @@
 #ifndef __GST_OBJECTSAREAINTERACTION_H__
 #define __GST_OBJECTSAREAINTERACTION_H__
 
+#include "contour.h"
+#include "draw.h"
+
 #include <gst/gst.h>
 #include <cv.h>
-#include <draw.h>
-#include <contour.h>
 
 G_BEGIN_DECLS
 
@@ -60,33 +61,26 @@ G_BEGIN_DECLS
 #define GST_IS_OBJECTSAREAINTERACTION(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OBJECTSAREAINTERACTION))
 #define GST_IS_OBJECTSAREAINTERACTION_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OBJECTSAREAINTERACTION))
 
-#define PRINT_COLOR_AREACONTOUR                    CV_RGB(255, 0, 0)
-#define PRINT_LINE_SIZE_AREACONTOUR                1
-#define PRINT_COLOR_OBJCONTOUR                     CV_RGB(0, 0, 255)
-#define PRINT_LINE_SIZE_OBJCONTOUR                 1
-#define PRINT_COLOR_INTCONTOUR                     CV_RGB(100, 185, 185)
-#define PRINT_LINE_SIZE_INTCONTOUR                 -1
-
 typedef struct _GstObjectsAreaInteraction GstObjectsAreaInteraction;
 typedef struct _GstObjectsAreaInteractionClass GstObjectsAreaInteractionClass;
 
 struct _GstObjectsAreaInteraction
 {
-    GstElement          element;
-    IplImage           *image;
+    GstElement    element;
+    IplImage     *image;
 
-    GstPad             *sinkpad;
-    GstPad             *srcpad;
+    GstPad       *sinkpad;
+    GstPad       *srcpad;
 
-    gboolean            verbose;
-    gboolean            display;
-    gboolean            display_area;
-    gboolean            display_object;
-    gchar              *contours;
+    gboolean      verbose;
+    gboolean      display;
+    gboolean      display_area;
+    gboolean      display_object;
+    gchar        *contours;
 
-    GstClockTime        timestamp;
-    GArray             *contours_area_settled;
-    GArray             *contours_area_in;
+    GstClockTime  timestamp;
+    GArray       *contours_area_settled;
+    GArray       *contours_area_in;
 };
 
 struct _GstObjectsAreaInteractionClass

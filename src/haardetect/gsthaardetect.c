@@ -352,7 +352,7 @@ gst_haar_detect_chain(GstPad *pad, GstBuffer *buf)
         (filter->roi_array != NULL) &&
         (filter->roi_array->len > 0)) {
 
-        int i;
+        guint i;
         for (i = 0; i < filter->roi_array->len; ++i) {
             cvSetImageROI(filter->gray, g_array_index(filter->roi_array, CvRect, i));
             detect_haars(filter, buf);
@@ -369,7 +369,7 @@ gst_haar_detect_chain(GstPad *pad, GstBuffer *buf)
 static void
 detect_haars(GstHaarDetect *filter, GstBuffer *buf)
 {
-    guint i;
+    gint i;
     CvRect roi;
     CvSeq *haars;
 

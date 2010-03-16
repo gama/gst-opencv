@@ -53,13 +53,13 @@
  * <refsect2>
  * <title>Example launch line</title>
  * |[
- * gst-launch-0.10 videotestsrc ! decodebin ! ffmpegcolorspace !
- *      bgfgcodebook roi=true model-min=40 model-max=50 !
- *      haardetect profile=/apps/opencv/opencv/data/haarcascades/haarcascade_mcs_upperbody.xml min-size=30 min-neighbors=5 roi-only=true verbose=true !
- *      haaradjust display=TRUE !
- *      objectstracker verbose=true display=true !
- *      objectsinteraction verbose=true display=true !
- *      ffmpegcolorspace ! xvimagesink sync=false
+ * gst-launch-0.10 videotestsrc ! decodebin ! ffmpegcolorspace     !
+ *                 bgfgcodebook roi=true                           !
+ *                 haardetect                                      !
+ *                 haaradjust                                      !
+ *                 surftracker                                     !
+ *                 objectsinteraction verbose=true display=true    !
+ *                 ffmpegcolorspace ! xvimagesink sync=false
  * ]|
  * </refsect2>
  */
@@ -75,8 +75,17 @@
 #include <cvaux.h>
 #include <highgui.h>
 
+#define PRINT_COLOR CV_RGB(100, 185, 185)
+
 GST_DEBUG_CATEGORY_STATIC(gst_objectsinteraction_debug);
 #define GST_CAT_DEFAULT gst_objectsinteraction_debug
+
+typedef struct _InstanceObjectIn InstanceObjectIn;
+struct _InstanceObjectIn
+{
+    gint   id;
+    CvRect rect;
+};
 
 enum {
     PROP_0,
@@ -99,14 +108,15 @@ static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE("src",
 
 GST_BOILERPLATE(GstObjectsInteraction, gst_objectsinteraction, GstElement, GST_TYPE_ELEMENT);
 
-static void gst_objectsinteraction_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec);
-static void gst_objectsinteraction_get_property(GObject * object, guint prop_id, GValue *value, GParamSpec *pspec);
-static gboolean gst_objectsinteraction_set_caps(GstPad *pad, GstCaps *caps);
-static GstFlowReturn gst_objectsinteraction_chain(GstPad * pad, GstBuffer * buf);
-static gboolean events_cb(GstPad *pad, GstEvent *event, gpointer user_data);
+static void          gst_objectsinteraction_set_property (GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec);
+static void          gst_objectsinteraction_get_property (GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+static gboolean      gst_objectsinteraction_set_caps     (GstPad *pad, GstCaps *caps);
+static GstFlowReturn gst_objectsinteraction_chain        (GstPad *pad, GstBuffer *buf);
+static gboolean      events_cb                           (GstPad *pad, GstEvent *event, gpointer user_data);
 
 static void
-gst_objectsinteraction_finalize(GObject *obj) {
+gst_objectsinteraction_finalize(GObject *obj)
+{
     GstObjectsInteraction *filter = GST_OBJECTSINTERACTION(obj);
     if (filter->image) cvReleaseImage(&filter->image);
     G_OBJECT_CLASS(parent_class)->finalize(obj);
@@ -115,14 +125,15 @@ gst_objectsinteraction_finalize(GObject *obj) {
 // gobject vmethod implementations
 
 static void
-gst_objectsinteraction_base_init(gpointer gclass) {
+gst_objectsinteraction_base_init(gpointer gclass)
+{
     GstElementClass *element_class = GST_ELEMENT_CLASS(gclass);
 
     gst_element_class_set_details_simple(element_class,
-            "objectsinteraction",
-            "Filter/Video",
-            "Performs objects interaction",
-            "Lucas Pantuza Amorim <lucas@vettalabs.com>");
+                                         "objectsinteraction",
+                                         "Filter/Video",
+                                         "Performs objects interaction",
+                                         "Lucas Pantuza Amorim <lucas@vettalabs.com>");
 
     gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&src_factory));
     gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&sink_factory));
@@ -131,7 +142,8 @@ gst_objectsinteraction_base_init(gpointer gclass) {
 // initialize the objectsinteraction's class
 
 static void
-gst_objectsinteraction_class_init(GstObjectsInteractionClass *klass) {
+gst_objectsinteraction_class_init(GstObjectsInteractionClass *klass)
+{
     GObjectClass *gobject_class;
 
     gobject_class = (GObjectClass*) klass;
@@ -142,12 +154,14 @@ gst_objectsinteraction_class_init(GstObjectsInteractionClass *klass) {
     gobject_class->get_property = gst_objectsinteraction_get_property;
 
     g_object_class_install_property(gobject_class, PROP_VERBOSE,
-            g_param_spec_boolean("verbose", "Verbose", "Sets whether the movement direction should be printed to the standard output",
-            FALSE, G_PARAM_READWRITE));
+                                    g_param_spec_boolean("verbose",
+                                                         "Verbose", "Sets whether the movement direction should be printed to the standard output",
+                                                         FALSE, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_DISPLAY,
-            g_param_spec_boolean("display", "Display", "Highligh the metrixed faces in the video output",
-            FALSE, G_PARAM_READWRITE));
+                                    g_param_spec_boolean("display", "Display",
+                                                         "Highligh the metrixed faces in the video output",
+                                                         FALSE, G_PARAM_READWRITE));
 }
 
 // initialize the new element
@@ -156,7 +170,8 @@ gst_objectsinteraction_class_init(GstObjectsInteractionClass *klass) {
 // initialize instance structure
 
 static void
-gst_objectsinteraction_init(GstObjectsInteraction *filter, GstObjectsInteractionClass *gclass) {
+gst_objectsinteraction_init(GstObjectsInteraction *filter, GstObjectsInteractionClass *gclass)
+{
     filter->sinkpad = gst_pad_new_from_static_template(&sink_factory, "sink");
     gst_pad_set_setcaps_function(filter->sinkpad, GST_DEBUG_FUNCPTR(gst_objectsinteraction_set_caps));
     gst_pad_set_getcaps_function(filter->sinkpad, GST_DEBUG_FUNCPTR(gst_pad_proxy_getcaps));
@@ -171,11 +186,12 @@ gst_objectsinteraction_init(GstObjectsInteraction *filter, GstObjectsInteraction
     filter->verbose = FALSE;
     filter->display = FALSE;
     filter->rect_timestamp = 0;
-    filter->object_in_array = g_array_new(FALSE, FALSE, sizeof (InstanceObjectIn));
+    filter->object_in_array = g_array_new(FALSE, FALSE, sizeof(InstanceObjectIn));
 }
 
 static void
-gst_objectsinteraction_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec) {
+gst_objectsinteraction_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec)
+{
     GstObjectsInteraction *filter = GST_OBJECTSINTERACTION(object);
 
     switch (prop_id) {
@@ -192,7 +208,8 @@ gst_objectsinteraction_set_property(GObject *object, guint prop_id, const GValue
 }
 
 static void
-gst_objectsinteraction_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec) {
+gst_objectsinteraction_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+{
     GstObjectsInteraction *filter = GST_OBJECTSINTERACTION(object);
 
     switch (prop_id) {
@@ -209,11 +226,12 @@ gst_objectsinteraction_get_property(GObject *object, guint prop_id, GValue *valu
 }
 
 static gboolean
-gst_objectsinteraction_set_caps(GstPad *pad, GstCaps *caps) {
+gst_objectsinteraction_set_caps(GstPad *pad, GstCaps *caps)
+{
     GstObjectsInteraction *filter;
-    GstPad *other_pad;
-    GstStructure *structure;
-    gint width, height, depth;
+    GstPad                *other_pad;
+    GstStructure          *structure;
+    gint                   width, height, depth;
 
     filter = GST_OBJECTSINTERACTION(gst_pad_get_parent(pad));
     structure = gst_caps_get_structure(caps, 0);
@@ -234,7 +252,8 @@ gst_objectsinteraction_set_caps(GstPad *pad, GstCaps *caps) {
 // chain function; this function does the actual processing
 
 static GstFlowReturn
-gst_objectsinteraction_chain(GstPad *pad, GstBuffer *buf) {
+gst_objectsinteraction_chain(GstPad *pad, GstBuffer *buf)
+{
     GstObjectsInteraction *filter;
 
     // sanity checks
@@ -246,54 +265,60 @@ gst_objectsinteraction_chain(GstPad *pad, GstBuffer *buf) {
 
     // Process all objects
     if ((filter->object_in_array != NULL) && (filter->object_in_array->len > 0)) {
-
         // Find interceptions rects pairs
-        int i, j;
+        guint i, j;
+
         for (i = 0; i < filter->object_in_array->len; ++i) {
             for (j = i + 1; j < filter->object_in_array->len; ++j) {
-                InstanceObjectIn obj_a = g_array_index(filter->object_in_array, InstanceObjectIn, i);
-                InstanceObjectIn obj_b = g_array_index(filter->object_in_array, InstanceObjectIn, j);
-                int interception = 100 * MIN(rectIntercept(&obj_a.rect, &obj_b.rect), rectIntercept(&obj_b.rect, &obj_a.rect));
+                InstanceObjectIn obj_a, obj_b;
+                gint             interception;
+
+                obj_a = g_array_index(filter->object_in_array, InstanceObjectIn, i);
+                obj_b = g_array_index(filter->object_in_array, InstanceObjectIn, j);
+                interception = 100 * MIN(rectIntercept(&obj_a.rect, &obj_b.rect), rectIntercept(&obj_b.rect, &obj_a.rect));
 
                 if (interception) {
+                    GstEvent     *event;
+                    GstMessage   *message;
+                    GstStructure *structure;
+                    CvRect        rect;
 
                     // Interception percentage
-                    CvRect rect = rectIntersection(obj_a.rect, obj_b.rect);
+                    rect = rectIntersection(&obj_a.rect, &obj_b.rect);
 
                     if (filter->verbose)
-                        GST_INFO("INTERCEPTION %i%%: rect_a(%i, %i, %i, %i), rect_b(%i, %i, %i, %i), rect_intercept(%i, %i, %i, %i)\n",
-                            interception,
-                            obj_a.rect.x, obj_a.rect.y, obj_a.rect.width, obj_a.rect.height,
-                            obj_b.rect.x, obj_b.rect.y, obj_b.rect.width, obj_b.rect.height,
-                            rect.x, rect.y, rect.width, rect.height);
+                        GST_INFO_OBJECT(filter, "INTERCEPTION %i%%: rect_a(%i, %i, %i, %i), rect_b(%i, %i, %i, %i), rect_intercept(%i, %i, %i, %i)\n",
+                                        interception,
+                                        obj_a.rect.x, obj_a.rect.y, obj_a.rect.width, obj_a.rect.height,
+                                        obj_b.rect.x, obj_b.rect.y, obj_b.rect.width, obj_b.rect.height,
+                                        rect.x, rect.y, rect.width, rect.height);
 
                     // Draw intercept rect and label
                     if (filter->display) {
-                        cvRectangle(filter->image,
-                                cvPoint(rect.x, rect.y),
-                                cvPoint(rect.x + rect.width, rect.y + rect.height),
-                                PRINT_COLOR, -1, 8, 0);
                         char *label;
-                        float font_scaling = ((filter->image->width * filter->image->height) > (320 * 240)) ? 0.5f : 0.3f;
+                        float font_scaling;
+
+                        cvRectangle(filter->image,
+                                    cvPoint(rect.x, rect.y),
+                                    cvPoint(rect.x + rect.width, rect.y + rect.height),
+                                    PRINT_COLOR, -1, 8, 0);
+                        font_scaling = ((filter->image->width * filter->image->height) > (320 * 240)) ? 0.5f : 0.3f;
                         label = g_strdup_printf("%i+%i (%i%%)", obj_a.id, obj_b.id, interception);
                         printText(filter->image, cvPoint(rect.x + (rect.width / 2), rect.y + (rect.height / 2)), label, PRINT_COLOR, font_scaling, 1);
                         g_free(label);
                     }
 
                     // Send downstream event and bus message with the rect info
-                    GstEvent *event;
-                    GstMessage *message;
-                    GstStructure *structure;
                     structure = gst_structure_new("object-interaction",
-                            "id_a", G_TYPE_UINT, obj_a.id,
-                            "id_b", G_TYPE_UINT, obj_b.id,
-                            "percentage", G_TYPE_UINT, interception,
-                            "x", G_TYPE_UINT, rect.x,
-                            "y", G_TYPE_UINT, rect.y,
-                            "width", G_TYPE_UINT, rect.width,
-                            "height", G_TYPE_UINT, rect.height,
-                            "timestamp", G_TYPE_UINT64, GST_BUFFER_TIMESTAMP(buf),
-                            NULL);
+                                                  "id_a",       G_TYPE_UINT,   obj_a.id,
+                                                  "id_b",       G_TYPE_UINT,   obj_b.id,
+                                                  "percentage", G_TYPE_UINT,   interception,
+                                                  "x",          G_TYPE_UINT,   rect.x,
+                                                  "y",          G_TYPE_UINT,   rect.y,
+                                                  "width",      G_TYPE_UINT,   rect.width,
+                                                  "height",     G_TYPE_UINT,   rect.height,
+                                                  "timestamp",  G_TYPE_UINT64, GST_BUFFER_TIMESTAMP(buf),
+                                                  NULL);
                     message = gst_message_new_element(GST_OBJECT(filter), gst_structure_copy(structure));
                     gst_element_post_message(GST_ELEMENT(filter), message);
                     event = gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM, structure);
@@ -307,7 +332,7 @@ gst_objectsinteraction_chain(GstPad *pad, GstBuffer *buf) {
 
     // Clean objects
     g_array_free(filter->object_in_array, TRUE);
-    filter->object_in_array = g_array_sized_new(FALSE, FALSE, sizeof (InstanceObjectIn), 1);
+    filter->object_in_array = g_array_sized_new(FALSE, FALSE, sizeof(InstanceObjectIn), 1);
 
     gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
     return gst_pad_push(filter->srcpad, buf);
@@ -317,9 +342,11 @@ gst_objectsinteraction_chain(GstPad *pad, GstBuffer *buf) {
 // callbacks
 
 static
-gboolean events_cb(GstPad *pad, GstEvent *event, gpointer user_data) {
+gboolean
+events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
+{
     GstObjectsInteraction *filter;
-    const GstStructure *structure;
+    const GstStructure    *structure;
 
     filter = GST_OBJECTSINTERACTION(user_data);
 
@@ -332,15 +359,15 @@ gboolean events_cb(GstPad *pad, GstEvent *event, gpointer user_data) {
 
     if ((structure != NULL) && (strcmp(gst_structure_get_name(structure), "object-tracking") == 0)) {
         InstanceObjectIn object_in;
-        GstClockTime timestamp;
+        GstClockTime     timestamp;
 
         gst_structure_get((GstStructure*) structure,
-                "id", G_TYPE_UINT, &object_in.id,
-                "x", G_TYPE_UINT, &object_in.rect.x,
-                "y", G_TYPE_UINT, &object_in.rect.y,
-                "width", G_TYPE_UINT, &object_in.rect.width,
-                "height", G_TYPE_UINT, &object_in.rect.height,
-                "timestamp", G_TYPE_UINT64, &timestamp, NULL);
+                          "id",        G_TYPE_UINT,   &object_in.id,
+                          "x",         G_TYPE_UINT,   &object_in.rect.x,
+                          "y",         G_TYPE_UINT,   &object_in.rect.y,
+                          "width",     G_TYPE_UINT,   &object_in.rect.width,
+                          "height",    G_TYPE_UINT,   &object_in.rect.height,
+                          "timestamp", G_TYPE_UINT64, &timestamp, NULL);
 
         if (timestamp > filter->rect_timestamp) {
             filter->rect_timestamp = timestamp;
@@ -355,10 +382,11 @@ gboolean events_cb(GstPad *pad, GstEvent *event, gpointer user_data) {
 // and registers the element factories and other features
 
 gboolean
-gst_objectsinteraction_plugin_init(GstPlugin * plugin) {
+gst_objectsinteraction_plugin_init(GstPlugin *plugin)
+{
     // debug category for filtering log messages
     GST_DEBUG_CATEGORY_INIT(gst_objectsinteraction_debug, "objectsinteraction", 0,
-            "Performs objects interaction");
+                            "Performs objects interaction");
 
     return gst_element_register(plugin, "objectsinteraction", GST_RANK_NONE, GST_TYPE_OBJECTSINTERACTION);
 }

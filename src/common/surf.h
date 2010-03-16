@@ -1,5 +1,5 @@
 /*
-  *Copyright (C) 2009 Lucas Amorim <lucas@vettalabs.com>
+ * Copyright (C) 2009 Lucas Amorim <lucas@vettalabs.com>
  */
 
 #ifndef __GST_OPENCV_COMMON_SURF__
@@ -10,7 +10,7 @@
 
 typedef struct _IntPair IntPair;
 
-struct _IntPair{
+struct _IntPair {
     int a;
     int b;
 };
@@ -31,10 +31,10 @@ void     findPairs              (const CvSeq  *objectKeypoints,
                                  const CvSeq  *imageDescriptors,
                                  GArray       *pairs);
 
-CvSeq    *getMatchPoints        (const CvSeq  *src,
+CvSeq*   getMatchPoints         (const CvSeq  *src,
                                  const GArray *pairs,
                                  const int     PAIR_A_0__PAIR_B_1,
-                                 CvMemStorage *mem_storage);
+                                 CvMemStorage *storage);
 
 CvPoint  surfCentroid           (const CvSeq  *seq,
                                  CvPoint       pt_displacement);
@@ -53,4 +53,4 @@ CvRect   rectDisplacement       (const CvSeq  *objectKeypoints,
 
 CvRect   surfPointsBoundingRect (const CvSeq  *seq);
 
-#endif
+#endif // __GST_OPENCV_COMMON_SURF__

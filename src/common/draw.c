@@ -3,43 +3,52 @@
  */
 
 #include "draw.h"
+#include <glib.h>
 
-void printText(IplImage *dst, CvPoint point, const char *text, CvScalar color, float font_scale, int box1_nobox0) {
-    const int labelBorder = 4;
+#define DISPLACEMENT 1
+
+void
+printText(IplImage *dst, CvPoint point, const char *text, CvScalar color,
+          float font_scale, gint box1_nobox0)
+{
     CvFont font;
     CvSize text_size;
-    int baseline;
+    gint   baseline, x, y;
 
     // setup font and calculate text size
     cvInitFont(&font, CV_FONT_HERSHEY_DUPLEX, font_scale, font_scale, 0, 1, CV_AA);
     cvGetTextSize(text, &font, &text_size, &baseline);
 
-    
-    int x = (text_size.width  + ((box1_nobox0)?(2*labelBorder):0))/2;
-    int y = (text_size.height + ((box1_nobox0)?(2*labelBorder):0))/2;
-    if(point.x - x < 0) point.x = x;
-    if(point.y - y < 0) point.y = y;
-    if(point.x + x > dst->width ) point.x = dst->width  - x;
-    if(point.y + y > dst->height) point.y = dst->height - y;
-    
+    x = (text_size.width  + ((box1_nobox0)?(2*LABEL_BORDER):0))/2;
+    y = (text_size.height + ((box1_nobox0)?(2*LABEL_BORDER):0))/2;
+
+    if (point.x - x < 0) point.x = x;
+    if (point.y - y < 0) point.y = y;
+    if (point.x + x > dst->width ) point.x = dst->width  - x;
+    if (point.y + y > dst->height) point.y = dst->height - y;
+
     // the text is drawn using the given color as background and black as foreground
     if (box1_nobox0) {
         cvRectangle(dst,
-                cvPoint((point.x - (text_size.width/2) - labelBorder), (point.y - (text_size.height/2) - labelBorder)),
-                cvPoint((point.x + (text_size.width/2) + labelBorder), (point.y + (text_size.height/2) + labelBorder)),
-                color, -1, 8, 0);
+                    cvPoint((point.x - (text_size.width/2) - LABEL_BORDER), (point.y - (text_size.height/2) - LABEL_BORDER)),
+                    cvPoint((point.x + (text_size.width/2) + LABEL_BORDER), (point.y + (text_size.height/2) + LABEL_BORDER)),
+                    color, -1, 8, 0);
         color = cvScalarAll(255);
     }
-    
+
     cvPutText(dst, text, cvPoint((point.x - (text_size.width/2)), (point.y + (text_size.height/2))), &font, color);
 }
 
-void monitorImage(IplImage *src_bin, IplImage *dst, int scale, int quadrant) {
+void
+monitorImage(IplImage *src_bin, IplImage *dst, gint scale, gint quadrant)
+{
+    IplImage *min_mask, *min_maskc;
+    CvRect    rectPos;
+    gint      w, h;
 
-    int w = dst->width / scale;
-    int h = dst->height / scale;
+    w = dst->width  / scale;
+    h = dst->height / scale;
 
-    CvRect rectPos;
     if (quadrant == 1)
         rectPos = cvRect(dst->width - w, 0, w, h);
     else if (quadrant == 2)
@@ -49,10 +58,10 @@ void monitorImage(IplImage *src_bin, IplImage *dst, int scale, int quadrant) {
     else
         rectPos = cvRect(0, 0, w, h);
 
-    IplImage * min_mask = cvCreateImage(cvSize(w, h), 8, 1);
+    min_mask = cvCreateImage(cvSize(w, h), 8, 1);
     cvResize(src_bin, min_mask, CV_INTER_LINEAR);
 
-    IplImage *min_maskc = cvCreateImage(cvSize(w, h), 8, 3);
+    min_maskc = cvCreateImage(cvSize(w, h), 8, 3);
     cvCvtColor(min_mask, min_maskc, CV_GRAY2BGR);
 
     cvSetImageROI(dst, rectPos);
@@ -63,55 +72,74 @@ void monitorImage(IplImage *src_bin, IplImage *dst, int scale, int quadrant) {
     cvReleaseImage(&min_maskc);
 }
 
-int contourIsFull(CvSeq *contour, IplImage *src) {
-    const int desloc = 1;
+int
+contourIsFull(CvSeq *contour, IplImage *src)
+{
     CvRect rect = cvBoundingRect(contour, 0);
-    if (rect.x <= desloc || rect.y <= desloc ||
-            (rect.x + rect.width) >= (src->width - desloc) ||
-            (rect.y + rect.height) >= (src->height - desloc))
+
+    if ((rect.x <= DISPLACEMENT)                                ||
+        (rect.y <= DISPLACEMENT)                                ||
+        ((rect.x + rect.width) >=  (src->width - DISPLACEMENT)) ||
+        ((rect.y + rect.height) >= (src->height - DISPLACEMENT)))
         return 0;
     else
         return 1;
 }
 
-double euclid_dist_points(CvPoint2D32f p1, CvPoint2D32f p2) {
+double
+euclid_dist_points(CvPoint2D32f p1, CvPoint2D32f p2)
+{
     return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2));
 }
 
-CvScalar colorIdx(int i){
+CvScalar
+colorIdx(int i)
+{
     CvScalar vet[] = {COLOR_GREEN,COLOR_MAGENTA,COLOR_BLUE,COLOR_RED,COLOR_YELLOW,COLOR_CIAN};
     return vet[i%6];
 }
 
-void pr(CvRect ob){
+void
+pr(CvRect ob)
+{
     g_print("RECT\tx1=%i\ty1=%i\tx2=%i\ty2=%i\twidth=%i\theigth=%i\n",ob.x, ob.y, ob.x+ob.width, ob.y+ob.height, ob.width, ob.height);
 }
 
-void pp(CvPoint ob){
+void
+pp(CvPoint ob)
+{
     g_print("POINT\tx=%i\ty=%i\n",ob.x, ob.y);
 }
 
-void pi(int i){
+void
+pi(int i)
+{
     g_print("INT\t%i\n",i);
 }
 
-void ps(int i){
-    int j=0;
-    while(j<i){
+void
+ps(int i)
+{
+    int j = 0;
+    while (j<i) {
         g_print("\n");
         ++j;
     }
 }
 
-void pt(char *s){
+void
+pt(char *s)
+{
     g_print("%s\n",s);
 }
 
-void draw_face_id(IplImage *dst, const gchar *face_id, const CvRect *face_rect,
-                  CvScalar color, float font_scale, gboolean draw_face_box) {
+void
+draw_face_id(IplImage *dst, const gchar *face_id, const CvRect *face_rect,
+             CvScalar color, float font_scale, gboolean draw_face_box)
+{
     CvFont font;
     CvSize text_size;
-    int    baseline;
+    gint   baseline;
 
     // sanity checks
     g_return_if_fail(dst       != NULL);
@@ -137,29 +165,45 @@ void draw_face_id(IplImage *dst, const gchar *face_id, const CvRect *face_rect,
     cvPutText(dst, face_id , cvPoint(face_rect->x, face_rect->y), &font, cvScalarAll(0));
 }
 
-float distRectToPoint(CvRect rect, CvPoint point){
-    return (float)sqrt(pow(((rect.x+(rect.width/2)) - point.x), 2) + pow(((rect.y+(rect.height/2)) - point.y), 2));
+float
+distRectToPoint(CvRect rect, CvPoint point)
+{
+    return (float) sqrt(pow(((rect.x+(rect.width/2)) - point.x), 2) +
+                        pow(((rect.y+(rect.height/2)) - point.y), 2));
 }
 
-int pointIntoRect(CvRect rect, CvPoint point){
-    if(point.x < rect.x || point.x > (rect.x+rect.width) || point.y < rect.y || point.y > (rect.y+rect.height)) return 0;
-    else return 1;
+int
+pointIntoRect(CvRect rect, CvPoint point)
+{
+    if ((point.x < rect.x)                ||
+        (point.x > (rect.x + rect.width)) ||
+        (point.y < rect.y)                ||
+        (point.y > (rect.y + rect.height)))
+        return 0;
+    else
+        return 1;
 }
 
-CvRect rectIntersection(const CvRect r1, const CvRect r2){
-    CvRect r = cvRect( MAX(r1.x, r2.x), MAX(r1.y, r2.y), 0, 0 );
-    r.width  = MIN(r1.x + r1.width, r2.x + r2.width) - r.x;
-    r.height = MIN(r1.y + r1.height, r2.y + r2.height) - r.y;
+CvRect
+rectIntersection(const CvRect *a, const CvRect *b)
+{
+    CvRect r = cvRect(MAX(a->x, b->x), MAX(a->y, b->y), 0, 0);
+    r.width  = MIN(a->x + a->width,  b->x + b->width)  - r.x;
+    r.height = MIN(a->y + a->height, b->y + b->height) - r.y;
     return r;
 }
 
-float rectIntercept(CvRect *a, CvRect *b){
-    CvRect rect = cvMaxRect(a,b);
-    if(rect.width > (a->width + b->width)) return 0;
-    if(rect.height > (a->height + b->height)) return 0;
-    
-    rect = rectIntersection(*a, *b);
-    return (float)(rect.height * rect.width)/(a->height * a->width);
+float
+rectIntercept(const CvRect *a, const CvRect *b)
+{
+    CvRect rect = cvMaxRect(a, b);
+
+    if (rect.width > (a->width + b->width))
+        return 0;
+
+    if (rect.height > (a->height + b->height))
+        return 0;
+
+    rect = rectIntersection(a, b);
+    return (float) (rect.height * rect.width) / (a->height * a->width);
 }
-
-

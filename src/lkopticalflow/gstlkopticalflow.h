@@ -73,7 +73,7 @@ struct _GstLKOpticalFlow
     CvPoint2D32f *points[2];
     char *status;
     guint flags;
-    int count;
+    guint count;
     float prev_avg_x;
     gboolean initialized;
 

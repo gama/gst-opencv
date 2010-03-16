@@ -44,8 +44,8 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_OBJECTSINTERACTION_H__
-#define __GST_OBJECTSINTERACTION_H__
+#ifndef __GST_OBJECTS_INTERACTION_H__
+#define __GST_OBJECTS_INTERACTION_H__
 
 #include <gst/gst.h>
 #include <cv.h>
@@ -59,31 +59,22 @@ G_BEGIN_DECLS
 #define GST_IS_OBJECTSINTERACTION(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OBJECTSINTERACTION))
 #define GST_IS_OBJECTSINTERACTION_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OBJECTSINTERACTION))
 
-#define PRINT_COLOR                        CV_RGB(100, 185, 185)
-
-typedef struct _InstanceObjectIn InstanceObjectIn;
-typedef struct _GstObjectsInteraction GstObjectsInteraction;
+typedef struct _GstObjectsInteraction      GstObjectsInteraction;
 typedef struct _GstObjectsInteractionClass GstObjectsInteractionClass;
-
-struct _InstanceObjectIn
-{
-    int                     id;
-    CvRect               rect;
-};
 
 struct _GstObjectsInteraction
 {
-    GstElement        element;
-    IplImage           *image;
+    GstElement    element;
+    IplImage     *image;
 
-    GstPad             *sinkpad;
-    GstPad             *srcpad;
+    GstPad       *sinkpad;
+    GstPad       *srcpad;
 
-    gboolean            verbose;
-    gboolean            display;
+    gboolean      verbose;
+    gboolean      display;
 
-    GstClockTime      rect_timestamp;
-    GArray              *object_in_array;
+    GstClockTime  rect_timestamp;
+    GArray       *object_in_array;
 };
 
 struct _GstObjectsInteractionClass
@@ -96,4 +87,4 @@ gboolean gst_objectsinteraction_plugin_init (GstPlugin *plugin);
 
 G_END_DECLS
 
-#endif /* __GST_OBJECTSINTERACTION_H__ */
+#endif /* __GST_OBJECTS_INTERACTION_H__ */

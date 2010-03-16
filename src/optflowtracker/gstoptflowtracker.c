@@ -476,7 +476,7 @@ gst_optical_flow_tracker_chain(GstPad *pad, GstBuffer *buf)
     IplImage          *bgr;
     GstClockTime       timestamp;
     gpointer           swap_pointer;
-    gint               i;
+    guint              i;
 
     // sanity checks
     g_return_val_if_fail(pad != NULL, GST_FLOW_ERROR);
@@ -504,7 +504,8 @@ gst_optical_flow_tracker_chain(GstPad *pad, GstBuffer *buf)
             InstanceObject *object;
             CvRect         *rect;
             float           max_area_overlap;
-            gint            j, best_match_idx;
+            gint            best_match_idx;
+            guint           j;
 
             rect = &g_array_index(filter->haar_roi_array, CvRect, i);
 
@@ -820,8 +821,7 @@ rect_area_overlap_perc(const CvRect *a, const CvRect *b)
     CvRect rect;
 
     rect = rect_intersection(a, b);
-    float f = ((a->height * a->width == .0f) ? .0f : (float) (rect.height * rect.width) / (a->height * a->width));
-    return f;
+    return ((a->height * a->width == .0f) ? .0f : (float) (rect.height * rect.width) / (a->height * a->width));
 }
 
 // callbacks

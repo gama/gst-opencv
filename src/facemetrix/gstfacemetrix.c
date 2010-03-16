@@ -330,7 +330,7 @@ gst_facemetrix_chain(GstPad *pad, GstBuffer *buf)
         (filter->face_array != NULL) &&
         (filter->face_array->len > 0)) {
 
-        int i;
+        guint i;
 
         filter->image->imageData = (char*) GST_BUFFER_DATA(buf);
 

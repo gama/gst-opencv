@@ -45,11 +45,11 @@ void     draw_face_id       (IplImage     *dst,
                              float         font_scale,
                              gboolean      draw_face_box);
 
-float    rectIntercept      (CvRect       *a,
-                             CvRect       *b);
+float    rectIntercept      (const CvRect *a,
+                             const CvRect *b);
 
-CvRect   rectIntersection   (const CvRect  r1,
-                             const CvRect  r2);
+CvRect   rectIntersection   (const CvRect *a,
+                             const CvRect *b);
 
 float    distRectToPoint    (CvRect        rect,
                              CvPoint       point);

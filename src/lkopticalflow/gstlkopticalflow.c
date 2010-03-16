@@ -324,7 +324,7 @@ gst_lkopticalflow_chain(GstPad *pad, GstBuffer *buf)
 
         filter->count = filter->max_points;
         filter->prev_avg_x = -1.0;
-        cvGoodFeaturesToTrack(filter->grey, eig, temp, filter->points[1], &(filter->count), quality,
+        cvGoodFeaturesToTrack(filter->grey, eig, temp, filter->points[1], (int*) &(filter->count), quality,
                               min_distance, 0, 3, 0, 0.04);
         // if (filter->verbose) g_printf("[lkoptioncalflow.chain][NOT initialized] filter->count: %d\n", filter->count);
         cvFindCornerSubPix(filter->grey, filter->points[1], filter->count, cvSize(filter->win_size, filter->win_size),
@@ -332,7 +332,7 @@ gst_lkopticalflow_chain(GstPad *pad, GstBuffer *buf)
         cvReleaseImage(&eig);
         cvReleaseImage(&temp);
     } else {
-        int i, k;
+        guint i, k;
 
         cvCalcOpticalFlowPyrLK(filter->prev_grey, filter->grey, filter->prev_pyramid, filter->pyramid,
                                filter->points[0], filter->points[1], filter->count, cvSize(filter->win_size, filter->win_size),

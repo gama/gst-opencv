@@ -68,7 +68,7 @@ static gpointer sgl_client_parent_class = NULL;
 
 // static function declarations
 static GIOError gnet_read_sgl_command_dup   (GIOChannel* channel, gchar** bufferp, gsize* bytes_readp);
-static gchar*   build_timestamp             (void);
+static gchar*   build_timestamp             ();
 static gboolean iochannel_handler           (GIOChannel *iochannel, GIOCondition condition, gpointer user_data);
 
 static gboolean sgl_client_check_connection (SglClient *client);
@@ -479,8 +479,8 @@ retry:
     return TRUE;
 }
 
-static
-gchar* build_timestamp()
+static gchar*
+build_timestamp()
 {
     time_t t;
     struct tm *tt;

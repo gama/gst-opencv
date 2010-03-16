@@ -5,8 +5,9 @@
 
 #include "identifier.h"
 
-CvRect onlyBiggerObject( IplImage* frameBW ){
-
+static CvRect
+onlyBiggerObject(IplImage* frameBW)
+{
     CvSeq *c, *cBig = NULL;
     CvMemStorage *tempStorage = cvCreateMemStorage(0);
     CvMat mstub;

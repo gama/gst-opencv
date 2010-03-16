@@ -4,7 +4,7 @@
  * Copyright (C) 2005 Ronald S. Bultje <rbultje@ronald.bitfreak.net>
  * Copyright (C) 2008 Michael Sheldon <mike@mikeasoft.com>
  * Copyright (C) 2010 Lucas Pantuza Amorim <lucas@vettalabs.com>
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
  * to deal in the Software without restriction, including without limitation
@@ -60,52 +60,28 @@ G_BEGIN_DECLS
 #define GST_IS_SURF_TRACKER(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SURF_TRACKER))
 #define GST_IS_SURF_TRACKER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SURF_TRACKER))
 
-#define PERC_RECT_TO_SAME_OBJECT           .6
-#define PAIRS_PERC_CONSIDERATE             .6
-#define PRINT_COLOR                        CV_RGB(205, 85, 85)
-#define MIN_MATCH_OBJECT                   .15
-#define DELOBJ_NFRAMES_IS_OLD              10
-#define DELOBJ_COMBOFRAMES_IS_IRRELEVANT   3
-
-typedef struct _InstanceObject InstanceObject;
-typedef struct _GstSURFTracker GstSURFTracker;
+typedef struct _GstSURFTracker      GstSURFTracker;
 typedef struct _GstSURFTrackerClass GstSURFTrackerClass;
-
-struct _InstanceObject
-{
-    int                 id;
-    int                 last_frame_viewed;
-    int                 range_viewed;
-    CvSeq              *surf_object_keypoints;
-    CvSeq              *surf_object_descriptors;
-    CvSeq              *surf_object_keypoints_last_match;
-    CvSeq              *surf_object_descriptors_last_match;
-    CvMemStorage       *mem_storage;
-    CvRect              rect;
-    CvRect              rect_estimated;
-    GstClockTime        timestamp;
-    GstClockTime        last_body_identify_timestamp;
-};
 
 struct _GstSURFTracker
 {
-    GstElement          element;
-    IplImage           *image;
-    IplImage           *gray;
+    GstElement    element;
+    IplImage     *image;
+    IplImage     *gray;
 
-    GstPad             *sinkpad;
-    GstPad             *srcpad;
+    GstPad       *sinkpad;
+    GstPad       *srcpad;
 
-    gboolean            verbose;
-    gboolean            display;
-    gboolean            display_features;
+    gboolean      verbose;
+    gboolean      display;
+    gboolean      display_features;
 
-    int                 frames_processed;
-    int                 static_count_objects;
-    CvSURFParams        params;
-    GstClockTime        rect_timestamp;
-    GArray             *rect_array;
-    GArray             *stored_objects;
+    int           frames_processed;
+    int           static_count_objects;
+    CvSURFParams  params;
+    GstClockTime  rect_timestamp;
+    GArray       *rect_array;
+    GArray       *stored_objects;
 };
 
 struct _GstSURFTrackerClass

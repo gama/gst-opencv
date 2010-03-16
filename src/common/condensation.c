@@ -4,9 +4,13 @@
  */
 
 #include "condensation.h"
+#include <glib.h>
 
-void centroid(CvPoint2D32f *measurement, int size, double *x, double *y) {
-    int i;
+void
+centroid(CvPoint2D32f *measurement, gint size, double *x, double *y)
+{
+    gint i;
+
     *x = *y = 0;
     for (i = 0; i < size; i++) {
         *x += measurement[i].x;
@@ -16,34 +20,43 @@ void centroid(CvPoint2D32f *measurement, int size, double *x, double *y) {
     *y /= size;
 }
 
-double stdev(double *sample, int sample_size) {
-    int i;
-    double mean = 0, sum = 0;
+static double
+stdev(double *sample, gint sample_size)
+{
+    double mean, sum;
+    gint   i;
 
-    for (i = 0; i < sample_size; i++) {
+    mean = sum = 0.0;
+    for (i = 0; i < sample_size; i++)
         mean += sample[i];
-    }
-    for (i = 0; i < sample_size; i++) {
+
+    for (i = 0; i < sample_size; i++)
         sum += (pow(sample[i] - mean, 2));
-    }
 
     return sqrt(sum / sample_size);
 }
 
-double euclid_dist(CvPoint p1, CvPoint p2) {
+static double
+euclid_dist(CvPoint p1, CvPoint p2)
+{
     return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2));
 }
 
-CvConDensation *initCondensation(int state_vec_dim, int measurement_vec_dim, int sample_size, int max_width, int max_height) {
-
-    int i;
-    CvMat* lowerBound;
-    CvMat* upperBound;
+CvConDensation*
+initCondensation(gint state_vec_dim, gint measurement_vec_dim, gint sample_size,
+                 gint max_width, gint max_height)
+{
+    CvConDensation *ConDens;
+    CvRNG           rng_state;
+    CvMat          *lowerBound;
+    CvMat          *upperBound;
+    gint            i;
 
     lowerBound = cvCreateMat(state_vec_dim, 1, CV_32F);
     upperBound = cvCreateMat(state_vec_dim, 1, CV_32F);
 
-    CvConDensation *ConDens = cvCreateConDensation(state_vec_dim, measurement_vec_dim, sample_size);
+    ConDens = cvCreateConDensation(state_vec_dim, measurement_vec_dim, sample_size);
+
     // coord x
     cvmSet(lowerBound, 0, 0, 0.0);
     cvmSet(upperBound, 0, 0, max_width);
@@ -59,7 +72,6 @@ CvConDensation *initCondensation(int state_vec_dim, int measurement_vec_dim, int
     // y speed (dy/dt)
     cvmSet(lowerBound, 3, 0, 0.0);
     cvmSet(upperBound, 3, 0, 1.0);
-
 
     // how to set dynamic matrix?
     // M = [1,0,1,0;0,1,0,1;0,0,1,0;0,0,0,1]
@@ -86,13 +98,11 @@ CvConDensation *initCondensation(int state_vec_dim, int measurement_vec_dim, int
     ConDens->DynamMatr[14] = 0;
     ConDens->DynamMatr[15] = 1;
 
-
     cvConDensInitSampleSet(ConDens, lowerBound, upperBound);
 
-    CvRNG rng_state = cvRNG(0xffffffff);
-
+    rng_state = cvRNG(0xffffffff);
     for (i = 0; i < sample_size; i++) {
-        ConDens->flSamples[i][0] = cvRandInt(&rng_state) % max_width; //0 -> x coord
+        ConDens->flSamples[i][0] = cvRandInt(&rng_state) % max_width;  //0 -> x coord
         ConDens->flSamples[i][1] = cvRandInt(&rng_state) % max_height; //1 -> y coord
     }
 
@@ -101,14 +111,15 @@ CvConDensation *initCondensation(int state_vec_dim, int measurement_vec_dim, int
     return ConDens;
 }
 
-void resample(IplImage* image, CvConDensation* ConDens, CvPoint * vetCentroids, int nCentroid, int show_particles, double *stdev_x, double *stdev_y) {
-    int i, j;
-    double var_x, var_y, dist;
-    double *sample_x;
-    double *sample_y;
+static void
+resample(IplImage* image, CvConDensation* ConDens, CvPoint * vetCentroids,
+         gint nCentroid, gint show_particles, double *stdev_x, double *stdev_y)
+{
+    double var_x, var_y, dist, *sample_x, *sample_y;
+    gint   i, j;
 
-    sample_x = (double*) malloc(ConDens->SamplesNum * sizeof (double));
-    sample_y = (double*) malloc(ConDens->SamplesNum * sizeof (double));
+    sample_x = g_new(double, ConDens->SamplesNum);
+    sample_y = g_new(double, ConDens->SamplesNum);
 
     //float stdev = sqrt(var/ConDens->SamplesNum);
 
@@ -124,8 +135,6 @@ void resample(IplImage* image, CvConDensation* ConDens, CvPoint * vetCentroids, 
     var_y = pow(*stdev_y, 2);
 
     for (i = 0; i < ConDens->SamplesNum; i++) {
-
-
 #if 0
         float p_x = 1.0, p_y = 1.0;
         p_x *= (float) exp(-1 * (measurement_x - ConDens->flSamples[i][0]) * (measurement_x - ConDens->flSamples[i][0]) / (2 * var_x));
@@ -140,15 +149,18 @@ void resample(IplImage* image, CvConDensation* ConDens, CvPoint * vetCentroids, 
         }
 #endif
 
-        if (show_particles == 1)
-            cvCircle(image, cvPoint(ConDens->flSamples[i][0], ConDens->flSamples[i][1]), 10 * ConDens->flConfidence[i], CV_RGB(0, 0, 255), 3, 8, 0);
-
+        if (show_particles == TRUE)
+            cvCircle(image, cvPoint(ConDens->flSamples[i][0], ConDens->flSamples[i][1]),
+                     10 * ConDens->flConfidence[i], CV_RGB(0, 0, 255), 3, 8, 0);
     }
-    free(sample_x);
-    free(sample_y);
+    g_free(sample_x);
+    g_free(sample_y);
 }
 
-void updateCondensation(IplImage* image, CvConDensation* ConDens, CvPoint *vetCentroids, int nCentroid, int show_particles) {
+void
+updateCondensation(IplImage* image, CvConDensation* ConDens, CvPoint *vetCentroids,
+                   gint nCentroid, gint show_particles)
+{
     double stdev_x, stdev_y;
     //int i;
 
@@ -159,8 +171,11 @@ void updateCondensation(IplImage* image, CvConDensation* ConDens, CvPoint *vetCe
     //*predicted_y = ConDens->State[1];
 }
 
-void getParticlesBoundary(CvConDensation *ConDens, CvRect *particlesBoundary, int max_width, int max_height) {
-    int i;
+void
+getParticlesBoundary(CvConDensation *ConDens, CvRect *particlesBoundary,
+                     gint max_width, gint max_height)
+{
+    gint i;
 
     particlesBoundary->x = max_width;
     particlesBoundary->y = max_height;

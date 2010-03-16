@@ -280,7 +280,7 @@ gst_motion_template_chain(GstPad *pad, GstBuffer *buf)
     g_return_val_if_fail(buf != NULL, GST_FLOW_ERROR);
     g_return_val_if_fail(filter->mhi != NULL, GST_FLOW_ERROR);
 
-    timestamp = ((double) clock()) / ((double) CLOCKS_PER_SEC); // get current time in seconds
+    timestamp = ((1.0f * clock()) / CLOCKS_PER_SEC); // get current time in seconds
 
     image = cvCreateImage(cvSize(filter->mhi->width, filter->mhi->height), 8, 3);
     image->imageData = (gchar*) GST_BUFFER_DATA(buf);
