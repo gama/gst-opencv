@@ -7,6 +7,7 @@
 #define __GST_OPENCV_COMMON_CONDENSATION__
 
 #include <cv.h>
+#include <cvaux.h>
 
 CvConDensation* initCondensation       (int state_vec_dim,
                                         int measurement_vec_dim,

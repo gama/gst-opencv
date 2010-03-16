@@ -8,8 +8,8 @@
 #include <glib.h>
 #include <cv.h>
 
-#include <opencv/cxcore.h>
-#include <opencv/cv.h>
+#include <cxcore.h>
+#include <cv.h>
 #include <highgui.h>
 #include <cvaux.h>
 #include <stdio.h>
