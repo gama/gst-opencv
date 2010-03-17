@@ -284,6 +284,7 @@ gst_objectsareainteraction_set_caps(GstPad *pad, GstCaps *caps) {
             makeContour(str_labelpts[1], &contour_temp.contour, contour_temp.mem_storage);
             contour_temp.id = i;
             contour_temp.name = g_strdup_printf(str_labelpts[0]);
+
             g_array_append_val(filter->contours_area_settled, contour_temp);
 
             g_strfreev(str_labelpts);
@@ -308,15 +309,23 @@ gst_objectsareainteraction_chain(GstPad *pad, GstBuffer *buf) {
     filter = GST_OBJECTSAREAINTERACTION(GST_OBJECT_PARENT(pad));
     filter->image->imageData = (char*) GST_BUFFER_DATA(buf);
 
-    // Draw only settled contour if not exist any object
-    if ((filter->display_area) &&
-       (filter->contours_area_settled != NULL) && (filter->contours_area_settled->len > 0) &&
-       ((filter->contours_area_in == NULL) || (filter->contours_area_in->len == 0))) {
+    // Draw objects contour
+    if ((filter->display_object) && (filter->contours_area_in != NULL) && (filter->contours_area_in->len > 0)){
         int i;
-        InstanceObjectAreaContour *obj_settled;
+        InstanceObjectAreaContour *obj;
+        for (i = 0; i < filter->contours_area_in->len; ++i) {
+            obj = &g_array_index(filter->contours_area_in, InstanceObjectAreaContour, i);
+            cvDrawContours(filter->image, obj->contour, PRINT_COLOR_OBJCONTOUR, PRINT_COLOR_OBJCONTOUR, 0, PRINT_LINE_SIZE_OBJCONTOUR, 8, cvPoint(0, 0));
+        }
+    }
+
+    // Draw settled area contour
+    if ((filter->display_area) && (filter->contours_area_settled != NULL) && (filter->contours_area_settled->len > 0)){
+        int i;
+        InstanceObjectAreaContour *obj;
         for (i = 0; i < filter->contours_area_settled->len; ++i) {
-            obj_settled = &g_array_index(filter->contours_area_settled, InstanceObjectAreaContour, i);
-            cvDrawContours(filter->image, obj_settled->contour, PRINT_COLOR_AREACONTOUR, PRINT_COLOR_AREACONTOUR, 0, PRINT_LINE_SIZE_AREACONTOUR, 8, cvPoint(0, 0));
+            obj = &g_array_index(filter->contours_area_settled, InstanceObjectAreaContour, i);
+            cvDrawContours(filter->image, obj->contour, PRINT_COLOR_AREACONTOUR, PRINT_COLOR_AREACONTOUR, 0, PRINT_LINE_SIZE_AREACONTOUR, 8, cvPoint(0, 0));
         }
     }
 
@@ -329,16 +338,8 @@ gst_objectsareainteraction_chain(GstPad *pad, GstBuffer *buf) {
         for (i = 0; i < filter->contours_area_settled->len; ++i) {
             obj_settled = &g_array_index(filter->contours_area_settled, InstanceObjectAreaContour, i);
 
-            // Draw settled contour
-            if (filter->display_area)
-                cvDrawContours(filter->image, obj_settled->contour, PRINT_COLOR_AREACONTOUR, PRINT_COLOR_AREACONTOUR, 0, PRINT_LINE_SIZE_AREACONTOUR, 8, cvPoint(0, 0));
-
             for (j = 0; j < filter->contours_area_in->len; ++j) {
                 obj_in = &g_array_index(filter->contours_area_in, InstanceObjectAreaContour, j);
-
-                // Draw objects
-                if (filter->display_object)
-                    cvDrawContours(filter->image, obj_in->contour, PRINT_COLOR_OBJCONTOUR, PRINT_COLOR_OBJCONTOUR, 0, PRINT_LINE_SIZE_OBJCONTOUR, 8, cvPoint(0, 0));
 
                 // Process the interception contour
                 InstanceObjectAreaContour contour_interception;
