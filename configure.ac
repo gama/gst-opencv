@@ -164,6 +164,7 @@ AC_OUTPUT([
     src/motiontemplate/Makefile
     src/objectsareainteraction/Makefile
     src/objectsinteraction/Makefile
+    src/optflowtracker/Makefile
     src/pyramidsegment/Makefile
     src/surftracker/Makefile
     src/templatematch/Makefile
