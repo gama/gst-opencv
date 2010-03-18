@@ -217,6 +217,8 @@ gst_haar_detect_init(GstHaarDetect *filter, GstHaarDetectClass *gclass)
     filter->profile       = DEFAULT_PROFILE;
     filter->save_images   = FALSE;
     filter->save_prefix   = DEFAULT_SAVE_PREFIX;
+    filter->min_neighbors = DEFAULT_MIN_NEIGHBORS;
+    filter->min_size      = DEFAULT_MIN_SIZE;
 
     gst_haar_detect_load_profile(filter);
 }
