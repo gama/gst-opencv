@@ -341,10 +341,9 @@ gst_surf_tracker_chain(GstPad *pad, GstBuffer *buf) {
             g_array_free(pairs, TRUE);
         }
 
-        cvReleaseMemStorage(&surf_image_mem_storage);
         if (surf_image_keypoints != NULL) cvClearSeq(surf_image_keypoints);
         if (surf_image_descriptors != NULL) cvClearSeq(surf_image_descriptors);
-
+        cvReleaseMemStorage(&surf_image_mem_storage);
 
         // Clean old objects
         for (j = filter->stored_objects->len - 1; j >= 0; --j) {
