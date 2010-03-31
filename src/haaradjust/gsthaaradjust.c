@@ -193,7 +193,9 @@ gst_haar_adjust_init(GstHaarAdjust *filter, GstHaarAdjustClass *gclass)
     filter->object_type       = g_strdup(DEFAULT_OBJECT_TYPE);
     filter->height_adjustment = DEFAULT_HEIGHT_ADJUSTMENT;
     filter->rect_timestamp    = 0;
+    filter->rect_bg_timestamp    = 0;
     filter->rect_array        = g_array_sized_new(FALSE, FALSE, sizeof(CvRect), 1);
+    filter->rect_bg_array     = g_array_sized_new(FALSE, FALSE, sizeof(CvRect), 1);
 }
 
 static void
@@ -298,22 +300,61 @@ gst_haar_adjust_chain(GstPad *pad, GstBuffer *buf)
 
             rect = g_array_index(filter->rect_array, CvRect, i);
 
+            int complement_height_top_bg = -1;
+            int complement_height_bottom_bg = -1;
+            int complement_height_top_projected = -1;
+            int complement_height_bottom_projected = -1;
+
+            // Calculation of the 'height' complement of projected value
+            complement_height_bottom_projected = complement_height_top_projected = (rect.height * filter->height_adjustment) - rect.height;
+
+            // Calculation of the 'height' complement of haar rect and bg rect
+            if ((filter->rect_bg_timestamp == GST_BUFFER_TIMESTAMP(buf)) &&
+                    (filter->rect_bg_array != NULL) &&
+                    (filter->rect_bg_array->len > 0)) {
+
+                guint i;
+
+                for (i = 0; i < filter->rect_bg_array->len; ++i) {
+                    CvRect rect_bg_temp;
+                    rect_bg_temp = g_array_index(filter->rect_bg_array, CvRect, i);
+
+                    if (rectIntercept(&rect, &rect_bg_temp) == 1) {
+                        complement_height_bottom_bg = rect_bg_temp.height - rect.height - (rect.y - rect_bg_temp.y);
+                        complement_height_top_bg = rect_bg_temp.height - rect.height - ((rect_bg_temp.y + rect_bg_temp.height)-(rect.y + rect.height));
+                        break;
+                    }
+                }
+            }
+
             // adjust ROIs
             if (g_strcasecmp(filter->object_type, OBJECT_TYPE_UPPER_BODY) == 0) {
-                rect.height *= filter->height_adjustment;
+
+                if (CV_IABS(complement_height_bottom_projected - complement_height_bottom_bg) < (rect.height * MAX_PERC_DESVIATION_TO_FOLLOW_BG))
+                    rect.height += complement_height_bottom_bg;
+                else
+                    rect.height += complement_height_bottom_projected;
+
             } else if (g_strcasecmp(filter->object_type, OBJECT_TYPE_LOWER_BODY) == 0) {
-                rect.y -= rect.height;
-                rect.height *= filter->height_adjustment;
+
+                if (CV_IABS(complement_height_bottom_projected - complement_height_bottom_bg) < (rect.height * MAX_PERC_DESVIATION_TO_FOLLOW_BG)) {
+                    rect.height += complement_height_bottom_bg;
+                    rect.y -= complement_height_bottom_bg;
+                } else {
+                    rect.height += complement_height_bottom_projected;
+                    rect.y -= complement_height_bottom_projected;
+                }
+
             } else {
                 GST_ERROR("invalid object type: '%s'", filter->object_type);
                 break;
             }
 
             // if greater than the image margins, set new limits
-            if (rect.x < 0) rect.x = 0;
-            if (rect.y < 0) rect.y = 0;
-            if (rect.x + rect.width  > filter->image->width ) rect.width  = filter->image->width  - rect.x;
-            if (rect.y + rect.height > filter->image->height) rect.height = filter->image->height - rect.y;
+            //if (rect.x < 0) rect.x = 0;
+            //if (rect.y < 0) rect.y = 0;
+            //if (rect.x + rect.width  > filter->image->width ) rect.width  = filter->image->width  - rect.x;
+            //if (rect.y + rect.height > filter->image->height) rect.height = filter->image->height - rect.y;
 
             if (filter->verbose)
                 GST_INFO("[rect] x: %d, y: %d, width: %d, height: %d",
@@ -381,6 +422,25 @@ gboolean events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
             filter->rect_array = g_array_sized_new(FALSE, FALSE, sizeof(CvRect), 1);
         }
         g_array_append_val(filter->rect_array, rect);
+    }
+
+     if ((structure != NULL) && (strcmp(gst_structure_get_name(structure), "bgfg-roi") == 0)) {
+        CvRect rect;
+        GstClockTime timestamp;
+
+        gst_structure_get((GstStructure*) structure,
+                          "x",         G_TYPE_UINT,   &rect.x,
+                          "y",         G_TYPE_UINT,   &rect.y,
+                          "width",     G_TYPE_UINT,   &rect.width,
+                          "height",    G_TYPE_UINT,   &rect.height,
+                          "timestamp", G_TYPE_UINT64, &timestamp, NULL);
+
+        if (timestamp > filter->rect_bg_timestamp) {
+            filter->rect_bg_timestamp = timestamp;
+            g_array_free(filter->rect_bg_array, TRUE);
+            filter->rect_bg_array = g_array_sized_new(FALSE, FALSE, sizeof(CvRect), 1);
+        }
+        g_array_append_val(filter->rect_bg_array, rect);
     }
 
     return TRUE;

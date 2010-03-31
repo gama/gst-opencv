@@ -49,6 +49,7 @@
 
 #include <gst/gst.h>
 #include <cv.h>
+#include <draw.h>
 
 G_BEGIN_DECLS
 
@@ -57,6 +58,8 @@ G_BEGIN_DECLS
 #define GST_HAARADJUST_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_HAARADJUST,GstHaarAdjustClass))
 #define GST_IS_HAARADJUST(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_HAARADJUST))
 #define GST_IS_HAARADJUST_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_HAARADJUST))
+
+#define MAX_PERC_DESVIATION_TO_FOLLOW_BG 0.1f
 
 typedef struct _GstHaarAdjust GstHaarAdjust;
 typedef struct _GstHaarAdjustClass GstHaarAdjustClass;
@@ -76,6 +79,8 @@ struct _GstHaarAdjust
 
     GstClockTime             rect_timestamp;
     GArray                  *rect_array;
+    GstClockTime             rect_bg_timestamp;
+    GArray                  *rect_bg_array;
 };
 
 struct _GstHaarAdjustClass
