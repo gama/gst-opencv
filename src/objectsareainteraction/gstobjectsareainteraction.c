@@ -62,7 +62,8 @@
  *                                        display=true
  *                                        display-area=true
  *                                        display-object=true
- *                                        contours=390x126,390x364,400x393,400x126 !
+ *                                        contours=390x126,390x364,400x393,400x126
+ *                                        homography_matrix=-0.041083,-0.013256,15.446693,0.000000,-0.213482,68.383575,0.000000,-0.005763,1.000000,0.5 !
  *                 ffmpegcolorspace ! xvimagesink sync=false
  * ]|
  * </refsect2>
@@ -83,8 +84,8 @@
 #define PRINT_LINE_SIZE_AREACONTOUR 1
 #define PRINT_COLOR_OBJCONTOUR      CV_RGB(0, 0, 255)
 #define PRINT_LINE_SIZE_OBJCONTOUR  1
-#define PRINT_COLOR_INTCONTOUR      CV_RGB(100, 185, 185)
-#define PRINT_LINE_SIZE_INTCONTOUR  -1
+#define AREA_INTERACTION_COLOR      CV_RGB(19, 69,139 )
+#define PRINT_LINE_SIZE_AI_ARROW    2
 
 GST_DEBUG_CATEGORY_STATIC(gst_objectsareainteraction_debug);
 #define GST_CAT_DEFAULT gst_objectsareainteraction_debug
@@ -93,6 +94,7 @@ enum {
     PROP_0,
     PROP_VERBOSE,
     PROP_CONTOURS,
+    PROP_HOMOGRAPHY_MATRIX,
     PROP_DISPLAY,
     PROP_DISPLAY_AREA,
     PROP_DISPLAY_OBJECT
@@ -118,6 +120,8 @@ static void          gst_objectsareainteraction_get_property (GObject *object, g
 static gboolean      gst_objectsareainteraction_set_caps     (GstPad *pad, GstCaps *caps);
 static GstFlowReturn gst_objectsareainteraction_chain        (GstPad *pad, GstBuffer *buf);
 static gboolean      events_cb                               (GstPad *pad, GstEvent *event, gpointer user_data);
+static CvPoint       make_contour                            (const gchar *str, CvSeq **seq, CvMemStorage* storage);
+static CvPoint       point_convert                           (CvPoint pixel_point, CvMat *img2obj);
 
 static void
 gst_objectsareainteraction_finalize(GObject *obj)
@@ -135,10 +139,10 @@ gst_objectsareainteraction_base_init(gpointer gclass)
     GstElementClass *element_class = GST_ELEMENT_CLASS(gclass);
 
     gst_element_class_set_details_simple(element_class,
-                                         "objectsareainteraction",
-                                         "Filter/Video",
-                                         "Performs objects interaction",
-                                         "Lucas Pantuza Amorim <lucas@vettalabs.com>");
+            "objectsareainteraction",
+            "Filter/Video",
+            "Performs objects interaction",
+            "Lucas Pantuza Amorim <lucas@vettalabs.com>");
 
     gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&src_factory));
     gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&sink_factory));
@@ -181,7 +185,12 @@ gst_objectsareainteraction_class_init(GstObjectsAreaInteractionClass *klass)
     g_object_class_install_property(gobject_class, PROP_CONTOURS,
                                     g_param_spec_string("contours", "Contours",
                                                         "Settled contours",
-                                                        NULL, G_PARAM_READWRITE));
+                                                         NULL, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_HOMOGRAPHY_MATRIX,
+                                    g_param_spec_string("homography_matrix", "Homography matrix",
+                                                        "Homography matrix for conversion of 3d to 2d",
+                                                         NULL, G_PARAM_READWRITE));
 }
 
 // initialize the new element
@@ -203,14 +212,17 @@ gst_objectsareainteraction_init(GstObjectsAreaInteraction *filter, GstObjectsAre
     gst_element_add_pad(GST_ELEMENT(filter), filter->sinkpad);
     gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
 
-    filter->verbose               = FALSE;
-    filter->display               = FALSE;
-    filter->display_area          = FALSE;
-    filter->display_object        = FALSE;
-    filter->contours              = NULL;
-    filter->timestamp             = 0;
-    filter->contours_area_settled = g_array_new(FALSE, FALSE, sizeof(InstanceObjectAreaContour));
-    filter->contours_area_in      = g_array_new(FALSE, FALSE, sizeof(InstanceObjectAreaContour));
+    filter->verbose                      = FALSE;
+    filter->display                      = FALSE;
+    filter->display_area                 = FALSE;
+    filter->display_object               = FALSE;
+    filter->contours                     = NULL;
+    filter->homography_matrix            = NULL;
+    filter->img2obj                      = NULL;
+    filter->distance_ratio_onepx_nmeters = 1.0f;
+    filter->timestamp                    = 0;
+    filter->contours_area_settled        = g_array_new(FALSE, FALSE, sizeof(InstanceObjectAreaContour));
+    filter->contours_area_in             = g_array_new(FALSE, FALSE, sizeof(InstanceObjectAreaContour));
 }
 
 static void
@@ -233,6 +245,9 @@ gst_objectsareainteraction_set_property(GObject *object, guint prop_id, const GV
             break;
         case PROP_CONTOURS:
             filter->contours = g_value_dup_string(value);
+            break;
+        case PROP_HOMOGRAPHY_MATRIX:
+            filter->homography_matrix = g_value_dup_string(value);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -261,6 +276,10 @@ gst_objectsareainteraction_get_property(GObject *object, guint prop_id, GValue *
         case PROP_CONTOURS:
             g_value_take_string(value, filter->contours);
             break;
+            break;
+        case PROP_HOMOGRAPHY_MATRIX:
+            g_value_take_string(value, filter->homography_matrix);
+            break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
             break;
@@ -273,7 +292,7 @@ gst_objectsareainteraction_set_caps(GstPad *pad, GstCaps *caps)
     GstObjectsAreaInteraction *filter;
     GstPad                    *other_pad;
     GstStructure              *structure;
-    gint                       width, height, depth;
+    gint                       width, height, depth, i;
 
     filter    = GST_OBJECTSAREAINTERACTION(gst_pad_get_parent(pad));
     structure = gst_caps_get_structure(caps, 0);
@@ -289,10 +308,36 @@ gst_objectsareainteraction_set_caps(GstPad *pad, GstCaps *caps)
     other_pad = (pad == filter->srcpad) ? filter->sinkpad : filter->srcpad;
     gst_object_unref(filter);
 
+    // Set homography matrix
+    if (filter->homography_matrix != NULL) {
+        gchar **matrix;
+
+        g_strcanon(filter->homography_matrix, "0123456789x-,.", ' ');
+        filter->img2obj     = cvCreateMat(3, 3, CV_32F);
+        matrix              = g_strsplit(filter->homography_matrix, ",", 10);
+
+        for (i = 0; matrix[i] != NULL; ++i);
+        if (i < 10)
+            GST_ERROR_OBJECT(filter, "no homography_matrix[%i] have been set", i);
+
+        CV_MAT_ELEM(*filter->img2obj, float, 0, 0) = atof(matrix[0]);
+        CV_MAT_ELEM(*filter->img2obj, float, 0, 1) = atof(matrix[1]);
+        CV_MAT_ELEM(*filter->img2obj, float, 0, 2) = atof(matrix[2]);
+        CV_MAT_ELEM(*filter->img2obj, float, 1, 0) = atof(matrix[3]);
+        CV_MAT_ELEM(*filter->img2obj, float, 1, 1) = atof(matrix[4]);
+        CV_MAT_ELEM(*filter->img2obj, float, 1, 2) = atof(matrix[5]);
+        CV_MAT_ELEM(*filter->img2obj, float, 2, 0) = atof(matrix[6]);
+        CV_MAT_ELEM(*filter->img2obj, float, 2, 1) = atof(matrix[7]);
+        CV_MAT_ELEM(*filter->img2obj, float, 2, 2) = atof(matrix[8]);
+        filter->distance_ratio_onepx_nmeters       = atof(matrix[9]);
+
+    } else {
+        GST_ERROR_OBJECT(filter, "no homography_matrix have been set");
+    }
+
     // Set settled contours
     if (filter->contours != NULL) {
-        gchar **str_area;
-        gint    i;
+        gchar   **str_area;
 
         str_area = g_strsplit(filter->contours, "-", -1);
         for (i = 0; str_area[i] != NULL; ++i) {
@@ -302,13 +347,14 @@ gst_objectsareainteraction_set_caps(GstPad *pad, GstCaps *caps)
             if ((str_labelpts[0] != NULL) && (str_labelpts[1] != NULL)) {
                 InstanceObjectAreaContour contour_temp;
 
-                contour_temp.mem_storage = cvCreateMemStorage(0);
-                makeContour(str_labelpts[1], &contour_temp.contour, contour_temp.mem_storage);
-
-                contour_temp.id   = i;
-                contour_temp.name = g_strdup_printf("%s", str_labelpts[0]);
+                contour_temp.id                         = i;
+                contour_temp.name                       = g_strdup_printf("%s", str_labelpts[0]);
+                contour_temp.mem_storage                = cvCreateMemStorage(0);
+                contour_temp.centroid                   = make_contour(str_labelpts[1], &contour_temp.contour, contour_temp.mem_storage);
+                contour_temp.area_contours_distance     = NULL; //does not apply
 
                 g_array_append_val(filter->contours_area_settled, contour_temp);
+
             } else {
                 GST_WARNING_OBJECT(filter, "unable to parse contour string: \"%s\"", str_area[i]);
             }
@@ -317,8 +363,6 @@ gst_objectsareainteraction_set_caps(GstPad *pad, GstCaps *caps)
         }
 
         g_strfreev(str_area);
-    } else {
-        GST_WARNING_OBJECT(filter, "no contours have been set");
     }
 
     return gst_pad_set_caps(other_pad, caps);
@@ -330,7 +374,7 @@ static GstFlowReturn
 gst_objectsareainteraction_chain(GstPad *pad, GstBuffer *buf)
 {
     GstObjectsAreaInteraction *filter;
-    gint                       k;
+    guint                      i, j;
 
     // sanity checks
     g_return_val_if_fail(pad != NULL, GST_FLOW_ERROR);
@@ -342,8 +386,6 @@ gst_objectsareainteraction_chain(GstPad *pad, GstBuffer *buf)
     // Draw objects contour
     if ((filter->display_object) && (filter->contours_area_in != NULL) && (filter->contours_area_in->len > 0)) {
         InstanceObjectAreaContour *obj;
-        guint                      i;
-
         for (i = 0; i < filter->contours_area_in->len; ++i) {
             obj = &g_array_index(filter->contours_area_in, InstanceObjectAreaContour, i);
             cvDrawContours(filter->image, obj->contour, PRINT_COLOR_OBJCONTOUR, PRINT_COLOR_OBJCONTOUR, 0, PRINT_LINE_SIZE_OBJCONTOUR, 8, cvPoint(0, 0));
@@ -353,8 +395,6 @@ gst_objectsareainteraction_chain(GstPad *pad, GstBuffer *buf)
     // Draw settled area contour
     if ((filter->display_area) && (filter->contours_area_settled != NULL) && (filter->contours_area_settled->len > 0)) {
         InstanceObjectAreaContour *obj;
-        guint                      i;
-
         for (i = 0; i < filter->contours_area_settled->len; ++i) {
             obj = &g_array_index(filter->contours_area_settled, InstanceObjectAreaContour, i);
             cvDrawContours(filter->image, obj->contour, PRINT_COLOR_AREACONTOUR, PRINT_COLOR_AREACONTOUR, 0, PRINT_LINE_SIZE_AREACONTOUR, 8, cvPoint(0, 0));
@@ -363,80 +403,74 @@ gst_objectsareainteraction_chain(GstPad *pad, GstBuffer *buf)
 
     // Process all objects
     if ((filter->contours_area_in != NULL) && (filter->contours_area_in->len > 0) && (filter->contours_area_settled != NULL) && (filter->contours_area_settled->len > 0)) {
-        // Find interceptions rects pairs
+
         InstanceObjectAreaContour *obj_settled, *obj_in;
-        guint                      i, j;
 
         for (i = 0; i < filter->contours_area_settled->len; ++i) {
             obj_settled = &g_array_index(filter->contours_area_settled, InstanceObjectAreaContour, i);
 
             for (j = 0; j < filter->contours_area_in->len; ++j) {
-                InstanceObjectAreaContour contour_interception;
+
+                int              signal;
+                float            dist_m;
+                char            *label;
+                GstEvent        *event;
+                GstMessage      *message;
+                GstStructure    *structure;
 
                 obj_in = &g_array_index(filter->contours_area_in, InstanceObjectAreaContour, j);
+                signal = (obj_in->area_contours_distance[i] > 0) ? 1 : -1;
+                dist_m = signal * filter->distance_ratio_onepx_nmeters * euclid_dist_cvpoints(point_convert(obj_in->centroid, filter->img2obj), point_convert(obj_settled->centroid, filter->img2obj));
+                label  = g_strdup_printf("%s %1.2f meters from the '%s'", obj_in->name, dist_m, obj_settled->name);
 
-                // Process the interception contour
-                contour_interception.mem_storage = cvCreateMemStorage(0);
-                calcInterception(obj_settled, obj_in, &contour_interception);
-                if (contour_interception.contour != NULL) {
-                    GstEvent     *event;
-                    GstMessage   *message;
-                    GstStructure *structure;
-                    CvRect        rect;
-                    gint          interception;
-
-                    rect         = cvBoundingRect(contour_interception.contour, 1);
-                    interception = (int) (((gdouble) cvContourArea(contour_interception.contour, CV_WHOLE_SEQ) / cvContourArea(obj_in->contour, CV_WHOLE_SEQ)) * 100);
-
-                    if (filter->display) {
-                        char *label;
-                        float font_scaling;
-
-                        cvDrawContours(filter->image, contour_interception.contour, PRINT_COLOR_INTCONTOUR, PRINT_COLOR_INTCONTOUR, 0, PRINT_LINE_SIZE_INTCONTOUR, 8, cvPoint(0, 0));
-                        font_scaling = ((filter->image->width * filter->image->height) > (320 * 240)) ? 0.5f : 0.3f;
-                        label        = g_strdup_printf("OBJ#%i in '%s' (%i%%)", obj_in->id, obj_settled->name, interception);
-                        printText(filter->image, cvPoint(rect.x + (rect.width / 2), rect.y + (rect.height / 2)), label, PRINT_COLOR_INTCONTOUR, font_scaling, 1);
-                        g_free(label);
-                    }
-
-                    if (filter->verbose) {
-                        GST_INFO("OBJ#%i in '%s' (%i%%): rect(%i, %i, %i, %i)\n",
-                                 obj_in->id, obj_settled->name, interception,
-                                 rect.x, rect.y, rect.width, rect.height);
-                    }
-
-                    // Send downstream event and bus message with the rect info
-                    structure = gst_structure_new("object-areainteraction",
-                                                  "obj_in_id",        G_TYPE_UINT,   obj_in->id,
-                                                  "obj_settled_name", G_TYPE_STRING, obj_settled->name,
-                                                  "percentage",       G_TYPE_UINT,   interception,
-                                                  "x",                G_TYPE_UINT,   rect.x,
-                                                  "y",                G_TYPE_UINT,   rect.y,
-                                                  "width",            G_TYPE_UINT,   rect.width,
-                                                  "height",           G_TYPE_UINT,   rect.height,
-                                                  "timestamp",        G_TYPE_UINT64, GST_BUFFER_TIMESTAMP(buf),
-                                                  NULL);
-                    message = gst_message_new_element(GST_OBJECT(filter), gst_structure_copy(structure));
-                    gst_element_post_message(GST_ELEMENT(filter), message);
-                    event = gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM, structure);
-                    gst_pad_push_event(filter->srcpad, event);
+                if (filter->display) {
+                    cvLine(filter->image, obj_settled->centroid, obj_in->centroid, AREA_INTERACTION_COLOR, PRINT_LINE_SIZE_AI_ARROW, 8, 0);
+                    cvCircle(filter->image, obj_settled->centroid, 4*PRINT_LINE_SIZE_AI_ARROW, AREA_INTERACTION_COLOR, -1, 8, 0);
+                    printText(filter->image, obj_in->centroid, label, AREA_INTERACTION_COLOR, .4, 1);
                 }
 
-                // Clear 'contour_interception'
-                if (contour_interception.contour != NULL) cvClearSeq(contour_interception.contour);
-                cvReleaseMemStorage(&contour_interception.mem_storage);
+                if (filter->verbose) {
+                    GST_INFO("%s\n", label);
+                }
+
+                g_free(label);
+
+                // Send downstream event
+                structure = gst_structure_new("object-areainteraction",
+                        "obj_in_id", G_TYPE_UINT, obj_in->id,
+                        "obj_settled_name", G_TYPE_STRING, obj_settled->name,
+                        "distance", G_TYPE_FLOAT, dist_m,
+                        "x", G_TYPE_UINT, obj_in->centroid.x,
+                        "y", G_TYPE_UINT, obj_in->centroid.y,
+                        "timestamp", G_TYPE_UINT64, GST_BUFFER_TIMESTAMP(buf),
+                        NULL);
+                message = gst_message_new_element(GST_OBJECT(filter), gst_structure_copy(structure));
+                gst_element_post_message(GST_ELEMENT(filter), message);
+                event = gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM, structure);
+                gst_pad_push_event(filter->srcpad, event);
             }
         }
     }
 
-    // Clean objects
-    for (k = filter->contours_area_in->len - 1; k >= 0; --k) {
-        InstanceObjectAreaContour *object;
-        object = &g_array_index(filter->contours_area_in, InstanceObjectAreaContour, k);
-        if (object->contour != NULL) cvClearSeq(object->contour);
-        cvReleaseMemStorage(&object->mem_storage);
-        g_array_remove_index_fast(filter->contours_area_in, k);
+    // Clean old objects
+    if ((filter->contours_area_in != NULL) && (filter->contours_area_in->len > 0)) {
+        int k;
+        for (k = filter->contours_area_in->len - 1; k >= 0; --k) {
+            InstanceObjectAreaContour *object;
+            object = &g_array_index(filter->contours_area_in, InstanceObjectAreaContour, k);
+
+            if (object->timestamp >= filter->timestamp) continue;
+
+            cvClearSeq(object->contour);
+            cvReleaseMemStorage(&object->mem_storage);
+            g_free(object->name);
+            g_free(object->area_contours_distance);
+            g_array_remove_index_fast(filter->contours_area_in, k);
+        }
     }
+
+    // Update timestamp
+    filter->timestamp = GST_BUFFER_TIMESTAMP(buf);
 
     gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
     return gst_pad_push(filter->srcpad, buf);
@@ -445,8 +479,7 @@ gst_objectsareainteraction_chain(GstPad *pad, GstBuffer *buf)
 
 // callbacks
 
-static
-gboolean
+static gboolean
 events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
 {
     GstObjectsAreaInteraction *filter;
@@ -461,39 +494,176 @@ events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
 
     structure = gst_event_get_structure(event);
 
+    // Plugins possible: haar-detect-roi, haar-adjust-roi, object-tracking
     if ((structure != NULL) && (strcmp(gst_structure_get_name(structure), "object-tracking") == 0)) {
-        InstanceObjectAreaContour contour_temp;
-        CvRect                    rect;
-        CvContour                 header;
-        CvSeqBlock                block;
-        CvMat                    *vector;
-        GstClockTime              timestamp;
+
+        CvRect                       rect;
+        gint                         id;
+        CvContour                    header;
+        CvSeqBlock                   block;
+        CvMat                       *vector;
+        InstanceObjectAreaContour   *contour_temp;
+        gboolean                     old_object;
+        unsigned int                 i;
 
         gst_structure_get((GstStructure*) structure,
-                          "id",        G_TYPE_UINT,   &contour_temp.id,
+                          "id",        G_TYPE_UINT,   &id,
                           "x",         G_TYPE_UINT,   &rect.x,
                           "y",         G_TYPE_UINT,   &rect.y,
                           "width",     G_TYPE_UINT,   &rect.width,
                           "height",    G_TYPE_UINT,   &rect.height,
-                          "timestamp", G_TYPE_UINT64, &timestamp, NULL);
+                          NULL);
 
         vector = cvCreateMat(1, 4, CV_32SC2); // rect = 4 points
-
         CV_MAT_ELEM(*vector, CvPoint, 0, 0) = cvPoint(rect.x, rect.y);
         CV_MAT_ELEM(*vector, CvPoint, 0, 1) = cvPoint(rect.x, rect.y + rect.height);
         CV_MAT_ELEM(*vector, CvPoint, 0, 2) = cvPoint(rect.x + rect.width, rect.y + rect.height);
         CV_MAT_ELEM(*vector, CvPoint, 0, 3) = cvPoint(rect.x + rect.width, rect.y);
 
-        contour_temp.mem_storage = cvCreateMemStorage(0);
-        contour_temp.contour     = cvCloneSeq(cvPointSeqFromMat(CV_SEQ_KIND_CURVE + CV_SEQ_FLAG_CLOSED, vector, &header, &block), contour_temp.mem_storage);
+        // Located between existing objects
+        old_object = FALSE;
+        contour_temp = NULL;
+        if ((filter->contours_area_in != NULL) && (filter->contours_area_in->len > 0)) {
+            for (i = 0; i < filter->contours_area_in->len; ++i) {
+                contour_temp = &g_array_index(filter->contours_area_in, InstanceObjectAreaContour, i);
+                if (contour_temp->id == id) {
+                    old_object = TRUE;
+                    break;
+                }
+            }
+        }
 
-        g_array_append_val(filter->contours_area_in, contour_temp);
+        // If area settled exist, calcule distance
+        if ((filter->contours_area_settled != NULL) && (filter->contours_area_settled->len > 0)) {
+            InstanceObjectAreaContour *obj_settled;
 
-        if (timestamp > filter->timestamp)
-            filter->timestamp = timestamp;
+            if (old_object && contour_temp) {
+                cvClearSeq(contour_temp->contour);
+                cvReleaseMemStorage(&contour_temp->mem_storage);
+            } else {
+                contour_temp = (InstanceObjectAreaContour *) g_malloc(sizeof (InstanceObjectAreaContour));
+                contour_temp->id = id;
+                contour_temp->name = g_strdup_printf("OBJ#%i", id);
+                contour_temp->area_contours_distance = (float *) g_malloc(sizeof (float) * filter->contours_area_settled->len);
+            }
+
+            contour_temp->mem_storage = cvCreateMemStorage(0);
+            contour_temp->contour = cvCloneSeq(cvPointSeqFromMat(CV_SEQ_KIND_CURVE + CV_SEQ_FLAG_CLOSED, vector, &header, &block), contour_temp->mem_storage);
+            contour_temp->centroid = cvPoint(rect.x + (rect.width / 2), rect.y + (rect.height));
+            contour_temp->timestamp = filter->timestamp;
+
+            // Distance between this object and each area (history)
+            for (i = 0; i < filter->contours_area_settled->len; ++i) {
+                float current_distance;
+                int signal;
+
+                obj_settled = &g_array_index(filter->contours_area_settled, InstanceObjectAreaContour, i);
+
+                // signal "+", if new object or distance increasing OR signal "-", if distance decreasing
+                current_distance = euclid_dist_cvpoints(obj_settled->centroid, contour_temp->centroid);
+                signal = ((old_object) && (contour_temp->area_contours_distance[i] > current_distance)) ? -1 : 1;
+
+                contour_temp->area_contours_distance[i] = signal * current_distance;
+            }
+        }
+
+        // Include in array if not exist
+        if (!old_object)
+            g_array_append_val(filter->contours_area_in, *contour_temp);
+
     }
 
     return TRUE;
+}
+
+static CvPoint
+make_contour(const gchar *str, CvSeq **seq, CvMemStorage* storage)
+{
+    CvContour       header;
+    CvSeqBlock      block;
+    CvMat          *vector;
+    GArray         *array;
+    unsigned int    ln, n;
+    CvPoint         point_centroid;
+    gchar         **str_pt;
+
+    // Parser string to points array
+    g_assert(str);
+    array   = g_array_new(FALSE, FALSE, sizeof (CvPoint));
+    str_pt  = g_strsplit(str, ",", -1);
+    g_assert(str_pt);
+
+    // Initialization of the centroids coordenates
+    point_centroid.x = point_centroid.y = -1;
+
+    ln = 0;
+    while (str_pt[ln]) {
+
+        if (strlen(str_pt[ln]) > 1) {
+
+            gchar **str_pt_coord;
+            CvPoint point_temp;
+
+            // If point is centoid
+            gboolean is_centroid = (g_strrstr(str_pt[ln], "c") != NULL) ? TRUE : FALSE;
+
+            g_strcanon(str_pt[ln], "0123456789x", ' ');
+            str_pt_coord = g_strsplit(str_pt[ln], "x", 2);
+            g_assert(str_pt_coord);
+            point_temp = cvPoint(atoi(str_pt_coord[0]), atoi(str_pt_coord[1]));
+
+            if (is_centroid) {
+                point_centroid.x = point_temp.x;
+                point_centroid.y = point_temp.y;
+            }else{
+                g_array_append_val(array, point_temp);
+            }
+
+            g_strfreev(str_pt_coord);
+        }
+        ln++;
+    }
+    g_strfreev(str_pt);
+
+    // Convert points array in MAT
+    vector = cvCreateMat(1, array->len, CV_32SC2);
+
+    for (n = 0; n < array->len; ++n)
+        CV_MAT_ELEM(*vector, CvPoint, 0, n) = g_array_index(array, CvPoint, n);
+
+    g_array_free(array, TRUE);
+
+    // Convert MAT in SEQ
+    *seq = cvCloneSeq(cvPointSeqFromMat(CV_SEQ_KIND_CURVE + CV_SEQ_FLAG_CLOSED, vector, &header, &block), storage);
+
+    // If not have centroid in string, calculate this
+    if (point_centroid.x == -1 && point_centroid.y == -1) {
+        CvRect rect     = cvBoundingRect(*seq, 1);
+        point_centroid  = cvPoint(rect.x + (rect.width / 2), rect.y + (rect.height));
+    }
+
+    return point_centroid;
+}
+
+static CvPoint
+point_convert(CvPoint pixel_point, CvMat *img2obj) {
+
+    CvPoint3D32f p;
+
+    p.x = CV_MAT_ELEM(*img2obj, float, 0, 0) * pixel_point.x +
+            CV_MAT_ELEM(*img2obj, float, 0, 1) * pixel_point.x +
+            CV_MAT_ELEM(*img2obj, float, 0, 2);
+    p.y = CV_MAT_ELEM(*img2obj, float, 1, 0) * pixel_point.x +
+            CV_MAT_ELEM(*img2obj, float, 1, 1) * pixel_point.y +
+            CV_MAT_ELEM(*img2obj, float, 1, 2);
+    p.z = CV_MAT_ELEM(*img2obj, float, 2, 0) * pixel_point.x +
+            CV_MAT_ELEM(*img2obj, float, 2, 1) * pixel_point.y +
+            CV_MAT_ELEM(*img2obj, float, 2, 2);
+
+    p.x /= (fabs(p.z) > 0.0) ? p.z : INFINITY;
+    p.y /= (fabs(p.z) > 0.0) ? p.z : INFINITY;
+
+    return cvPoint(p.x, p.y);
 }
 
 // entry point to initialize the plug-in; initialize the plug-in itself
@@ -504,7 +674,7 @@ gst_objectsareainteraction_plugin_init(GstPlugin *plugin)
 {
     // debug category for filtering log messages
     GST_DEBUG_CATEGORY_INIT(gst_objectsareainteraction_debug, "objectsareainteraction", 0,
-                            "Performs objects interaction");
+            "Performs objects interaction");
 
     return gst_element_register(plugin, "objectsareainteraction", GST_RANK_NONE, GST_TYPE_OBJECTSAREAINTERACTION);
 }

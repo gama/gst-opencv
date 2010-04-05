@@ -5,7 +5,6 @@ noinst_LTLIBRARIES = libgstobjectsareainteraction.la
 # sources used to compile this plug-in
 libgstobjectsareainteraction_la_SOURCES =               \
 	gstobjectsareainteraction.c							\
-	contour.c                							\
 	$(NULL)
 
 # flags used to compile this objectsareainteraction
@@ -33,5 +32,4 @@ libgstobjectsareainteraction_la_DEPENDENCIES =			\
 # headers we need but don't want installed
 noinst_HEADERS =										\
 	gstobjectsareainteraction.h							\
-	contour.h                    						\
 	$(NULL)

@@ -207,3 +207,98 @@ rectIntercept(const CvRect *a, const CvRect *b)
     rect = rectIntersection(a, b);
     return (float) (rect.height * rect.width) / (a->height * a->width);
 }
+void
+draw_mesh(IplImage *dst, const CvPoint q1, const CvPoint q2, const CvPoint q3,
+        const CvPoint q4, const int w_lines, const int h_lines, CvScalar color)
+{
+
+    // Contours
+    cvLine(dst, q1, q2, color, 1, 8, 0);
+    cvLine(dst, q2, q3, color, 1, 8, 0);
+    cvLine(dst, q3, q4, color, 1, 8, 0);
+    cvLine(dst, q4, q1, color, 1, 8, 0);
+
+    int i;
+    float m, c;
+    CvPoint p_0, p_1;
+
+    // Horizontal
+    for (i = 0; i < h_lines; ++i) {
+        p_0.y = ((i + 1) * ((float) (q3.y - q4.y) / (float) (h_lines + 1))) + q4.y;
+
+        if ((q3.x - q4.x) == 0) {
+            p_0.x = q4.x;
+        } else {
+            m = (float) (q3.y - q4.y) / (float) (q3.x - q4.x);
+            c = q4.y - q4.x*m;
+            p_0.x = (p_0.y - c) / m;
+        }
+
+        p_1.y = ((i + 1) * ((float) (q2.y - q1.y) / (float) (h_lines + 1))) + q1.y;
+
+        if ((q2.x - q1.x) == 0) {
+            p_1.x = q1.x;
+        } else {
+            m = (float) (q2.y - q1.y) / (float) (q2.x - q1.x);
+            c = q1.y - q1.x*m;
+            p_1.x = (p_1.y - c) / m;
+        }
+
+        cvLine(dst, p_0, p_1, color, 1, 8, 0);
+    }
+
+    // Vertical
+    for (i = 0; i < w_lines; ++i) {
+        p_0.x = ((i + 1) * ((float) (q1.x - q4.x) / (float) (w_lines + 1))) + q4.x;
+
+        m = (float) (q1.y - q4.y) / (float) (q1.x - q4.x);
+        c = q4.y - q4.x*m;
+        p_0.y = (p_0.x * m) + c;
+
+        p_1.x = ((i + 1) * ((float) (q2.x - q3.x) / (float) (w_lines + 1))) + q3.x;
+
+        m = (float) (q2.y - q3.y) / (float) (q2.x - q3.x);
+        c = q3.y - q3.x*m;
+        p_1.y = (p_1.x * m) + c;
+
+        cvLine(dst, p_0, p_1, color, 1, 8, 0);
+    }
+}
+
+void
+set_proportion_and_border(CvRect *rect, float scale, int border_x, int border_y)
+{
+    rect->x *= scale;
+    rect->y *= scale;
+    rect->width *= scale;
+    rect->height *= scale;
+    rect->x += border_x;
+    rect->y += border_y;
+}
+
+CvPoint
+medium_point(CvPoint a, CvPoint b)
+{
+    return cvPoint(((b.x - a.x) / 2) + a.x, ((b.y - a.y) / 2) + a.y);
+}
+
+int
+inner_circle(int r, CvPoint c, CvPoint p)
+{
+    return ((((p.x - c.x)*(p.x - c.x)) + ((p.y - c.y)*(p.y - c.y))) <= (r * r)) ? 1 : 0;
+}
+
+float
+euclid_dist_cvpoints(CvPoint p1, CvPoint p2)
+{
+    return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2));
+}
+
+double
+linear_projection(const double min_real, const double min_projected,
+        const double max_real, const double max_projected,
+        const double known_projected_value)
+{
+    double p = (max_real - min_real) / (max_projected - min_projected);
+    return ((known_projected_value - min_projected) * p)+min_real; // return 'real' value
+}

@@ -47,7 +47,6 @@
 #ifndef __GST_OBJECTSAREAINTERACTION_H__
 #define __GST_OBJECTSAREAINTERACTION_H__
 
-#include "contour.h"
 #include "draw.h"
 
 #include <gst/gst.h>
@@ -61,26 +60,41 @@ G_BEGIN_DECLS
 #define GST_IS_OBJECTSAREAINTERACTION(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_OBJECTSAREAINTERACTION))
 #define GST_IS_OBJECTSAREAINTERACTION_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_OBJECTSAREAINTERACTION))
 
+typedef struct _InstanceObjectAreaContour InstanceObjectAreaContour;
 typedef struct _GstObjectsAreaInteraction GstObjectsAreaInteraction;
 typedef struct _GstObjectsAreaInteractionClass GstObjectsAreaInteractionClass;
 
+struct _InstanceObjectAreaContour
+{
+    gint             id;
+    gchar           *name;
+    CvSeq           *contour;
+    CvMemStorage    *mem_storage;
+    CvPoint          centroid;
+    float           *area_contours_distance;
+    GstClockTime     timestamp;
+};
+
 struct _GstObjectsAreaInteraction
 {
-    GstElement    element;
-    IplImage     *image;
+    GstElement       element;
+    IplImage        *image;
 
-    GstPad       *sinkpad;
-    GstPad       *srcpad;
+    GstPad          *sinkpad;
+    GstPad          *srcpad;
 
-    gboolean      verbose;
-    gboolean      display;
-    gboolean      display_area;
-    gboolean      display_object;
-    gchar        *contours;
+    gboolean         verbose;
+    gboolean         display;
+    gboolean         display_area;
+    gboolean         display_object;
+    gchar           *contours;
+    gchar           *homography_matrix;
 
-    GstClockTime  timestamp;
-    GArray       *contours_area_settled;
-    GArray       *contours_area_in;
+    GstClockTime     timestamp;
+    GArray          *contours_area_settled;
+    GArray          *contours_area_in;
+    CvMat           *img2obj;
+    gfloat           distance_ratio_onepx_nmeters;
 };
 
 struct _GstObjectsAreaInteractionClass
