@@ -401,32 +401,55 @@ gst_objectsareainteraction_chain(GstPad *pad, GstBuffer *buf)
         }
     }
 
-    // Process all objects
+    // Process all objects with settled areas and other objects
     if ((filter->contours_area_in != NULL) && (filter->contours_area_in->len > 0) && (filter->contours_area_settled != NULL) && (filter->contours_area_settled->len > 0)) {
 
-        InstanceObjectAreaContour *obj_settled, *obj_in;
+        InstanceObjectAreaContour *obj_a, *obj_b;
 
-        for (i = 0; i < filter->contours_area_settled->len; ++i) {
-            obj_settled = &g_array_index(filter->contours_area_settled, InstanceObjectAreaContour, i);
+        for (j = 0; j < filter->contours_area_in->len; ++j) {
 
-            for (j = 0; j < filter->contours_area_in->len; ++j) {
+            int i_area, i_obj;
 
-                int              signal;
+            i_area  = 0;
+            i_obj   = j + 1;
+
+            while (i_area < filter->contours_area_settled->len || i_obj < filter->contours_area_in->len) {
+
+                int              relationship_type_1objojb_0objarea;
                 float            dist_m;
                 char            *label;
                 GstEvent        *event;
                 GstMessage      *message;
                 GstStructure    *structure;
 
-                obj_in = &g_array_index(filter->contours_area_in, InstanceObjectAreaContour, j);
-                signal = (obj_in->area_contours_distance[i] > 0) ? 1 : -1;
-                dist_m = signal * filter->distance_ratio_onepx_nmeters * euclid_dist_cvpoints(point_convert(obj_in->centroid, filter->img2obj), point_convert(obj_settled->centroid, filter->img2obj));
-                label  = g_strdup_printf("%s %1.2f meters from the '%s'", obj_in->name, dist_m, obj_settled->name);
+                // Get object A to compare
+                obj_a = &g_array_index(filter->contours_area_in, InstanceObjectAreaContour, j);
+
+                // Get object B to compare
+                if (i_area < filter->contours_area_settled->len) { //obj - area
+                    obj_b = &g_array_index(filter->contours_area_settled, InstanceObjectAreaContour, i_area);
+                    relationship_type_1objojb_0objarea = 0;
+                    i_area++;
+                } else { //obj - obj
+                    obj_b = &g_array_index(filter->contours_area_in, InstanceObjectAreaContour, i_obj + j);
+                    relationship_type_1objojb_0objarea = 1;
+                    i_obj++;
+                }
+
+                // TODO calculate the sign to relationship obj<->obj (or delete the sign calculate)
+
+                // calculates the sign (if area) and the distance
+                dist_m = filter->distance_ratio_onepx_nmeters * euclid_dist_cvpoints(point_convert(obj_a->centroid, filter->img2obj), point_convert(obj_b->centroid, filter->img2obj));
+                if(!relationship_type_1objojb_0objarea)
+                    dist_m *= (obj_a->area_contours_distance[i_area] < dist_m) ? 1 : -1;
+
+                // create the label of relationship
+                label  = g_strdup_printf("'%s' %1.2f meters from the '%s'", obj_a->name, dist_m, obj_b->name);
 
                 if (filter->display) {
-                    cvLine(filter->image, obj_settled->centroid, obj_in->centroid, AREA_INTERACTION_COLOR, PRINT_LINE_SIZE_AI_ARROW, 8, 0);
-                    cvCircle(filter->image, obj_settled->centroid, 4*PRINT_LINE_SIZE_AI_ARROW, AREA_INTERACTION_COLOR, -1, 8, 0);
-                    printText(filter->image, obj_in->centroid, label, AREA_INTERACTION_COLOR, .4, 1);
+                    cvLine(filter->image, obj_a->centroid, obj_b->centroid, AREA_INTERACTION_COLOR, PRINT_LINE_SIZE_AI_ARROW, 8, 0);
+                    cvCircle(filter->image, obj_b->centroid, 4*PRINT_LINE_SIZE_AI_ARROW, AREA_INTERACTION_COLOR, -1, 8, 0);
+                    printText(filter->image, obj_a->centroid, label, AREA_INTERACTION_COLOR, .4, 1);
                 }
 
                 if (filter->verbose) {
@@ -437,12 +460,21 @@ gst_objectsareainteraction_chain(GstPad *pad, GstBuffer *buf)
 
                 // Send downstream event
                 structure = gst_structure_new("object-areainteraction",
-                        "obj_in_id", G_TYPE_UINT, obj_in->id,
-                        "obj_settled_name", G_TYPE_STRING, obj_settled->name,
-                        "distance", G_TYPE_FLOAT, dist_m,
-                        "x", G_TYPE_UINT, obj_in->centroid.x,
-                        "y", G_TYPE_UINT, obj_in->centroid.y,
-                        "timestamp", G_TYPE_UINT64, GST_BUFFER_TIMESTAMP(buf),
+
+                        "obj_a_id",     G_TYPE_UINT,    obj_a->id,
+                        "obj_a_name",   G_TYPE_STRING,  obj_a->name,
+                        "obj_a_x",      G_TYPE_UINT,    obj_a->centroid.x,
+                        "obj_a_y",      G_TYPE_UINT,    obj_a->centroid.y,
+
+                        "obj_b_id",     G_TYPE_UINT,    obj_b->id,
+                        "obj_b_name",   G_TYPE_STRING,  obj_b->name,
+                        "obj_b_x",      G_TYPE_UINT,    obj_b->centroid.x,
+                        "obj_b_y",      G_TYPE_UINT,    obj_b->centroid.y,
+
+                        "distance",     G_TYPE_FLOAT,   dist_m,
+                        "type",         G_TYPE_UINT,    relationship_type_1objojb_0objarea,
+                        "timestamp",    G_TYPE_UINT64,  GST_BUFFER_TIMESTAMP(buf),
+
                         NULL);
                 message = gst_message_new_element(GST_OBJECT(filter), gst_structure_copy(structure));
                 gst_element_post_message(GST_ELEMENT(filter), message);

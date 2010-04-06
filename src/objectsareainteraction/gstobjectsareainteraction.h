@@ -108,3 +108,4 @@ gboolean gst_objectsareainteraction_plugin_init (GstPlugin *plugin);
 G_END_DECLS
 
 #endif /* __GST_OBJECTSAREAINTERACTION_H__ */
+
