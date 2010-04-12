@@ -57,6 +57,9 @@ plugin_init (GstPlugin * plugin)
   if (!gst_faceblur_plugin_init (plugin))
     return FALSE;
 
+  if (!gst_facemetrix_plugin_init (plugin))
+    return FALSE;
+
   if (!gst_haar_adjust_plugin_init (plugin))
     return FALSE;
 
