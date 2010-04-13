@@ -12,6 +12,7 @@ SUBDIRS =																			\
 	motiontemplate																	\
 	lkopticalflow																	\
 	objectsareainteraction															\
+	interpreterinteraction															\
 	objectsinteraction																\
 	optflowtracker																	\
 	pyramidsegment																	\
@@ -39,6 +40,7 @@ libgstopencv_la_CFLAGS =															\
 	-I${top_srcdir}/src/motiontemplate												\
 	-I${top_srcdir}/src/lkopticalflow												\
 	-I${top_srcdir}/src/objectsareainteraction										\
+	-I${top_srcdir}/src/interpreterinteraction										\
 	-I${top_srcdir}/src/objectsinteraction											\
 	-I${top_srcdir}/src/optflowtracker												\
 	-I${top_srcdir}/src/pyramidsegment												\
@@ -62,6 +64,7 @@ libgstopencv_la_LIBADD =															\
 	$(top_builddir)/src/motiontemplate/libgstmotiontemplate.la						\
 	$(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la						\
 	$(top_builddir)/src/objectsareainteraction/libgstobjectsareainteraction.la		\
+	$(top_builddir)/src/interpreterinteraction/libgstinterpreterinteraction.la		\
 	$(top_builddir)/src/objectsinteraction/libgstobjectsinteraction.la				\
 	$(top_builddir)/src/optflowtracker/libgstoptflowtracker.la						\
 	$(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la						\
@@ -86,6 +89,7 @@ libgstopencv_la_DEPENDENCIES =														\
 	$(top_builddir)/src/motiontemplate/libgstmotiontemplate.la						\
 	$(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la						\
 	$(top_builddir)/src/objectsareainteraction/libgstobjectsareainteraction.la		\
+	$(top_builddir)/src/interpreterinteraction/libgstinterpreterinteraction.la		\
 	$(top_builddir)/src/objectsinteraction/libgstobjectsinteraction.la				\
 	$(top_builddir)/src/optflowtracker/libgstoptflowtracker.la						\
 	$(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la						\

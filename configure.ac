@@ -163,6 +163,7 @@ AC_OUTPUT([
     src/lkopticalflow/Makefile
     src/motiontemplate/Makefile
     src/objectsareainteraction/Makefile
+    src/interpreterinteraction/Makefile
     src/objectsinteraction/Makefile
     src/optflowtracker/Makefile
     src/pyramidsegment/Makefile
