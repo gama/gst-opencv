@@ -457,7 +457,7 @@ gst_surf_tracker_chain(GstPad *pad, GstBuffer *buf) {
 
                     cvRectangle(filter->image, cvPoint(rect.x, rect.y), cvPoint(rect.x + rect.width, rect.y + rect.height),
                                 PRINT_COLOR, ((object.last_body_identify_timestamp == timestamp) ? 2 : 1), 8, 0);
-                    label = g_strdup_printf("OBJ#%i (%1.2f%%)", object.id, (float) object.surf_object_descriptors_last_match->total / object.surf_object_descriptors->total);
+                    label = g_strdup_printf("OBJ#%i", object.id);
                     printText(filter->image, cvPoint(rect.x + (rect.width / 2), rect.y + (rect.height / 2)), label, PRINT_COLOR, font_scaling, 1);
                     g_free(label);
                 }
