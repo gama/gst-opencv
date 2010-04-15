@@ -38,6 +38,7 @@
 #include "gstinterpreterinteraction.h"
 #include "gstoptflowtracker.h"
 #include "gstpyramidsegment.h"
+#include "gststaticobjects.h"
 #include "gstsurftracker.h"
 #include "gsttemplatematch.h"
 #include "gsttracker.h"
@@ -89,6 +90,9 @@ plugin_init(GstPlugin *plugin)
     return FALSE;
 
   if (!gst_pyramidsegment_plugin_init (plugin))
+    return FALSE;
+
+  if (!gst_static_objects_plugin_init (plugin))
     return FALSE;
 
   if (!gst_surf_tracker_plugin_init (plugin))

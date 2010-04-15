@@ -17,6 +17,7 @@ SUBDIRS =																			\
 	objectsinteraction																\
 	optflowtracker																	\
 	pyramidsegment																	\
+	staticobjects																	\
 	surftracker																		\
 	templatematch																	\
 	tracker																			\
@@ -46,6 +47,7 @@ libgstopencv_la_CFLAGS =															\
 	-I${top_srcdir}/src/objectsinteraction											\
 	-I${top_srcdir}/src/optflowtracker												\
 	-I${top_srcdir}/src/pyramidsegment												\
+	-I${top_srcdir}/src/staticobjects												\
 	-I${top_srcdir}/src/surftracker													\
 	-I${top_srcdir}/src/templatematch												\
 	-I${top_srcdir}/src/tracker														\
@@ -71,6 +73,7 @@ libgstopencv_la_LIBADD =															\
 	$(top_builddir)/src/objectsinteraction/libgstobjectsinteraction.la				\
 	$(top_builddir)/src/optflowtracker/libgstoptflowtracker.la						\
 	$(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la						\
+	$(top_builddir)/src/staticobjects/libgststaticobjects.la						\
 	$(top_builddir)/src/surftracker/libgstsurftracker.la							\
 	$(top_builddir)/src/templatematch/libgsttemplatematch.la						\
 	$(top_builddir)/src/tracker/libgsttracker.la									\
@@ -97,6 +100,7 @@ libgstopencv_la_DEPENDENCIES =														\
 	$(top_builddir)/src/objectsinteraction/libgstobjectsinteraction.la				\
 	$(top_builddir)/src/optflowtracker/libgstoptflowtracker.la						\
 	$(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la						\
+	$(top_builddir)/src/staticobjects/libgststaticobjects.la						\
 	$(top_builddir)/src/surftracker/libgstsurftracker.la							\
 	$(top_builddir)/src/templatematch/libgsttemplatematch.la						\
 	$(top_builddir)/src/tracker/libgsttracker.la									\

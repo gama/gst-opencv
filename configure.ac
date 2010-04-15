@@ -168,6 +168,7 @@ AC_OUTPUT([
     src/objectsinteraction/Makefile
     src/optflowtracker/Makefile
     src/pyramidsegment/Makefile
+    src/staticobjects/Makefile
     src/surftracker/Makefile
     src/templatematch/Makefile
     src/tracker/Makefile
