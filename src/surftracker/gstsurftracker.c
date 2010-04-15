@@ -64,10 +64,11 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <gstsurftracker.h>
+#include "gstsurftracker.h"
+#include "tracked-object.h"
 
 #include <gst/gst.h>
 #include <gst/gststructure.h>
@@ -431,10 +432,9 @@ gst_surf_tracker_chain(GstPad *pad, GstBuffer *buf) {
 
             // 'Continue' whether the object is not found in this frame
             if (object.timestamp == timestamp) {
-                GstEvent     *event;
-                GstMessage   *message;
-                GstStructure *structure;
-                CvRect        rect;
+                TrackedObject *tracked_object;
+                GstEvent      *event;
+                CvRect         rect;
 
                 rect = ((object.last_body_identify_timestamp == timestamp) ? object.rect : object.rect_estimated);
 
@@ -462,18 +462,21 @@ gst_surf_tracker_chain(GstPad *pad, GstBuffer *buf) {
                     g_free(label);
                 }
 
-                // Send downstream event and bus message with the rect info
-                structure = gst_structure_new("object-tracking",
-                                              "id",        G_TYPE_UINT,   object.id,
-                                              "x",         G_TYPE_UINT,   rect.x,
-                                              "y",         G_TYPE_UINT,   rect.y,
-                                              "width",     G_TYPE_UINT,   rect.width,
-                                              "height",    G_TYPE_UINT,   rect.height,
-                                              "timestamp", G_TYPE_UINT64, GST_BUFFER_TIMESTAMP(buf),
-                                              NULL);
-                message = gst_message_new_element(GST_OBJECT(filter), gst_structure_copy(structure));
-                gst_element_post_message(GST_ELEMENT(filter), message);
-                event = gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM, structure);
+                // allocate and initialize 'TrackedObject' structure
+                tracked_object = tracked_object_new();
+                tracked_object->id        = g_strdup_printf("PERSON#%d", object.id);
+                tracked_object->type      = TRACKED_OBJECT_DYNAMIC;
+                tracked_object->height    = rect.height;
+                tracked_object->timestamp = timestamp;
+
+                // add the points that the define the lower part of the object (i.e,
+                // the lower horizontal segment of the rectangle) as the objects perimeter
+                tracked_object_add_point(tracked_object, rect.x, rect.y + rect.height);
+                tracked_object_add_point(tracked_object, rect.x + rect.width, rect.y + rect.height);
+
+                // send downstream event
+                event = gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM,
+                                             tracked_object_to_structure(tracked_object, "tracked-object"));
                 gst_pad_push_event(filter->srcpad, event);
             }
         }

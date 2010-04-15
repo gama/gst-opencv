@@ -81,17 +81,17 @@
  */
 
 #ifdef HAVE_CONFIG_H
-#include <config.h>
+#include "config.h"
 #endif
 
-#include <gstoptflowtracker.h>
+#include "gstoptflowtracker.h"
+#include "tracked-object.h"
 
 #include <gst/gst.h>
 #include <gst/gststructure.h>
 #include <cvaux.h>
 #include <highgui.h>
 
-#include "draw.h"
 
 GST_DEBUG_CATEGORY_STATIC(gst_optical_flow_tracker_debug);
 #define GST_CAT_DEFAULT gst_optical_flow_tracker_debug
@@ -680,39 +680,35 @@ gst_optical_flow_tracker_chain(GstPad *pad, GstBuffer *buf)
     // finally, generate the events for all the objects found in this frame
     for (i = 0; (filter->stored_objects != NULL) && (i < filter->stored_objects->len); ++i) {
         GstEvent       *event;
-        GstMessage     *message;
-        GstStructure   *structure;
         InstanceObject *object;
-        CvRect          rect;
-        gchar          *id_label;
+        TrackedObject  *tracked_object;
+        gchar          *tracked_object_str;
 
         object = g_ptr_array_index(filter->stored_objects, i);
-        rect   = object->rect;
+
+        // allocate and initialize 'TrackedObject' structure
+        tracked_object            = tracked_object_new();
+        tracked_object->id        = g_strdup_printf("OBJ#%d", object->id);
+        tracked_object->type      = TRACKED_OBJECT_DYNAMIC;
+        tracked_object->height    = object->rect.height;
+        tracked_object->timestamp = timestamp;
+
+        // add the points that the define the lower part of the object (i.e,
+        // the lower horizontal segment of the rectangle) as the objects perimeter
+        tracked_object_add_point(tracked_object, object->rect.x, object->rect.y + object->rect.height);
+        tracked_object_add_point(tracked_object, object->rect.x + object->rect.width, object->rect.y + object->rect.height);
 
         // skip objects not found on this frame
         if (object->last_frame != filter->n_frames)
             continue;
 
-        GST_DEBUG_OBJECT(filter, "[object #%d rect] x: %d, y: %d, width: %d, height: %d\n", object->id, rect.x, rect.y, rect.width, rect.height);
+        tracked_object_str = tracked_object_to_string(tracked_object);
+        GST_DEBUG_OBJECT(filter, "[object #%d] %s\n", tracked_object_str);
+        g_free(tracked_object_str);
 
-        // send downstream event and bus message with the rect info
-        id_label = g_strdup_printf("OBJ#%d", object->id);
-        structure = gst_structure_new("object-roi",
-                                      "id",        G_TYPE_STRING, id_label,
-                                      "x",         G_TYPE_UINT,   rect.x,
-                                      "y",         G_TYPE_UINT,   rect.y,
-                                      "width",     G_TYPE_UINT,   rect.width,
-                                      "height",    G_TYPE_UINT,   rect.height,
-                                      "timestamp", G_TYPE_UINT64, GST_BUFFER_TIMESTAMP(buf),
-                                      NULL);
-
-        message = gst_message_new_element(GST_OBJECT(filter), gst_structure_copy(structure));
-        gst_element_post_message(GST_ELEMENT(filter), message);
-        event = gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM, structure);
+        event = gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM,
+                                     tracked_object_to_structure(tracked_object, "tracked-object"));
         gst_pad_push_event(filter->srcpad, event);
-
-        g_free(id_label);
-
     }
 
     if (filter->display) {
