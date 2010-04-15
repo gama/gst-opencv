@@ -27,9 +27,10 @@
 #include "gstbgfgcodebook.h"
 #include "gstedgedetect.h"
 #include "gstfaceblur.h"
-#include "gsthaardetect.h"
 #include "gstfacemetrix.h"
 #include "gsthaaradjust.h"
+#include "gsthaardetect.h"
+#include "gsthomography.h"
 #include "gstmotiontemplate.h"
 #include "gstlkopticalflow.h"
 #include "gstobjectsareainteraction.h"
@@ -42,7 +43,7 @@
 #include "gsttracker.h"
 
 static gboolean
-plugin_init (GstPlugin * plugin)
+plugin_init(GstPlugin *plugin)
 {
 
   if (!gst_bgfg_acmmm2003_plugin_init (plugin))
@@ -64,6 +65,9 @@ plugin_init (GstPlugin * plugin)
     return FALSE;
 
   if (!gst_haar_detect_plugin_init (plugin))
+    return FALSE;
+
+  if (!gst_homography_plugin_init (plugin))
     return FALSE;
 
   if (!gst_motion_template_plugin_init (plugin))
