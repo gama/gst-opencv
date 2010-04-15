@@ -8,6 +8,7 @@ libgstcommon_la_SOURCES =								\
 	draw.c                                              \
 	identifier_motion.c									\
 	surf.c          									\
+	tracked-object.c									\
 	$(NULL)
 
 # flags used to compile this plugin
@@ -32,4 +33,5 @@ noinst_HEADERS = 										\
 	draw.h                                              \
 	identifier_motion.h									\
 	surf.h                                              \
+	tracked-object.h									\
 	$(NULL)
