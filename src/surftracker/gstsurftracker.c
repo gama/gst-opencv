@@ -452,7 +452,6 @@ gst_surf_tracker_chain(GstPad *pad, GstBuffer *buf) {
                     char *label;
                     float font_scaling;
 
-                    label        = g_strdup_printf("OBJ#%i (%i%%)", object.id, (!object.surf_object_descriptors_last_match) ? 100 : 100 * object.surf_object_descriptors_last_match->total / object.surf_object_descriptors->total);
                     font_scaling = ((filter->image->width * filter->image->height) > (320 * 240)) ? 0.5f : 0.3f;
 
                     cvRectangle(filter->image, cvPoint(rect.x, rect.y), cvPoint(rect.x + rect.width, rect.y + rect.height),
