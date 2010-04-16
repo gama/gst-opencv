@@ -33,6 +33,7 @@
 #include "gsthomography.h"
 #include "gstmotiontemplate.h"
 #include "gstlkopticalflow.h"
+#include "gstobjectdistances.h"
 #include "gstobjectsareainteraction.h"
 #include "gstobjectsinteraction.h"
 #include "gstinterpreterinteraction.h"
@@ -46,7 +47,6 @@
 static gboolean
 plugin_init(GstPlugin *plugin)
 {
-
   if (!gst_bgfg_acmmm2003_plugin_init (plugin))
     return FALSE;
 
@@ -71,16 +71,19 @@ plugin_init(GstPlugin *plugin)
   if (!gst_homography_plugin_init (plugin))
     return FALSE;
 
-  if (!gst_motion_template_plugin_init (plugin))
+  if (!gst_interpreter_interaction_plugin_init (plugin))
     return FALSE;
 
   if (!gst_lkopticalflow_plugin_init (plugin))
     return FALSE;
 
-  if (!gst_objectsareainteraction_plugin_init (plugin))
+  if (!gst_motion_template_plugin_init (plugin))
     return FALSE;
 
-  if (!gst_interpreter_interaction_plugin_init (plugin))
+  if (!gst_object_distances_plugin_init (plugin))
+    return FALSE;
+
+  if (!gst_objectsareainteraction_plugin_init (plugin))
     return FALSE;
 
   if (!gst_objectsinteraction_plugin_init (plugin))

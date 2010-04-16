@@ -163,6 +163,7 @@ AC_OUTPUT([
     src/homography/Makefile
     src/lkopticalflow/Makefile
     src/motiontemplate/Makefile
+    src/objectdistances/Makefile
     src/objectsareainteraction/Makefile
     src/interpreterinteraction/Makefile
     src/objectsinteraction/Makefile
