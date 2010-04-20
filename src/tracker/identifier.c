@@ -21,9 +21,9 @@ onlyBiggerObject(IplImage* frameBW)
     // Identifies largest object
     CvSlice cvslice = { 0, 0x3fffffff };
     double area, areaBig = -1;
-    while( (c = cvFindNextContour( scanner )) != 0 ){
-        area = fabs(cvContourArea(c,cvslice));
-        if(area > areaBig){
+    while ((c = cvFindNextContour(scanner)) != 0) {
+        area = fabs(cvContourArea(c, cvslice, 0));
+        if (area > areaBig) {
             areaBig = area;
             cBig = c;
         }
