@@ -61,7 +61,10 @@
  *                 haardetect       !
  *                 haaradjust       !
  *                 objectstracker   !
- *                 homography display=true verbose=true matrix=-0.041083,-0.013256,15.446693,0.000000,-0.213482,68.383575,0.000000,-0.005763,1.000000,0.5 !
+ *                 homography
+ *                      display=true
+ *                      verbose=true
+ *                      matrix=-0.041083,-0.013256,15.446693\;0.000000,-0.213482,68.383575\;0.000000,-0.005763,1.000000 !
  *                 ffmpegcolorspace !
  *                 autoimagesink
  * ]|
