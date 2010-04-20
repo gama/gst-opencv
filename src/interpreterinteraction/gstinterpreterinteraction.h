@@ -49,7 +49,6 @@
 
 #include <gst/gst.h>
 #include <cv.h>
-#include <draw.h>
 
 G_BEGIN_DECLS
 
@@ -62,31 +61,21 @@ G_BEGIN_DECLS
 typedef struct _GstInterpreterInteraction GstInterpreterInteraction;
 typedef struct _GstInterpreterInteractionClass GstInterpreterInteractionClass;
 typedef struct _ObjectList ObjectList;
-typedef struct _EventInteractionIn EventInteractionIn;
+typedef struct _EventInteractionInDistance EventInteractionInDistance;
 
 struct _ObjectList
 {
-    gint                     id;
     GstClockTime             last_timestamp;
     GArray                  *relations;
-    gint                     type_1ojb_0area;
+    gint                     type_0ojb_1area;
     gchar                   *name;
 };
 
-struct _EventInteractionIn
+struct _EventInteractionInDistance
 {
-    gint                     obj_a_id;
     gchar                   *obj_a_name;
-    gint                     obj_a_x;
-    gint                     obj_a_y;
-
-    gint                     obj_b_id;
     gchar                   *obj_b_name;
-    gint                     obj_b_x;
-    gint                     obj_b_y;
-
     gfloat                   distance;
-    gint                     type;
     GstClockTime             timestamp;
 };
 
@@ -101,10 +90,12 @@ struct _GstInterpreterInteraction
     gboolean                 verbose;
     gboolean                 display;
     gboolean                 display_data;
+    gfloat                   closed_min_threshold;
 
     GArray                  *objects_in_scene;
 
-    GArray                  *event_interaction_in;
+    GArray                  *event_interaction_in_distance;
+    GArray                  *event_interaction_in_objects;
     GstClockTime             timestamp;
 };
 

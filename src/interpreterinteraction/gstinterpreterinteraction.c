@@ -55,9 +55,16 @@
  * |[
  * gst-launch-0.10 videotestsrc ! decodebin ! ffmpegcolorspace !
  *      bgfgcodebook !
- *      facedetect !
- *      objectsareainteraction !
- *      interpreterinteraction verbose=TRUE !
+ *      haardetect !
+ *      haaradjust !
+ *      surftracker !
+ *      staticobjects !
+ *      objectdistances !
+ *      interpreterinteraction 
+ *              verbose=true
+ *              display=true
+ *              display-data=false
+ *              closed-min=80.0 !
  *      ffmpegcolorspace ! xvimagesink sync=false
  * ]|
  * </refsect2>
@@ -67,7 +74,9 @@
 #include <config.h>
 #endif
 
+#include "tracked-object.h"
 #include "gstinterpreterinteraction.h"
+#include "draw.h"
 
 #include <gst/gst.h>
 #include <gst/gststructure.h>
@@ -79,15 +88,18 @@
 GST_DEBUG_CATEGORY_STATIC (gst_interpreter_interaction_debug);
 #define GST_CAT_DEFAULT gst_interpreter_interaction_debug
 
-#define OLD_TIMESTAMPDIFF_TO_PROCESS 1000000000LL
-#define MIN_PERC_HIT 0.3f
+#define OLD_TIMESTAMPDIFF_TO_PROCESS    1000000000LL
+#define MIN_PERC_HIT                    0.3f
+#define MIN_PERC_HIT_TO_CLOSED          0.95f
+#define DEFAULT_CLOSED_MIN_THRESHOLD    80.0f
 
 enum
 {
     PROP_0,
     PROP_VERBOSE,
     PROP_DISPLAY,
-    PROP_DISPLAY_DATA
+    PROP_DISPLAY_DATA,
+    PROP_CLOSED_MIN_THRESHOLD
 };
 
 // the capabilities of the inputs and outputs.
@@ -105,13 +117,14 @@ static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE("src",
 
 GST_BOILERPLATE(GstInterpreterInteraction, gst_interpreter_interaction, GstElement, GST_TYPE_ELEMENT);
 
-static void          gst_interpreter_interaction_set_property (GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec);
-static void          gst_interpreter_interaction_get_property (GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
-static gboolean      gst_interpreter_interaction_set_caps     (GstPad *pad, GstCaps *caps);
-static GstFlowReturn gst_interpreter_interaction_chain        (GstPad *pad, GstBuffer *buf);
-static gboolean      events_cb                                (GstPad *pad, GstEvent *event, gpointer user_data);
-static ObjectList*   include_objects_itens                    (GArray *list, gint id, gint type_1ojb_0area, gchar *name, GstClockTime timestamp, guint sizeof_relation_item);
-static void          process_events                           (GstInterpreterInteraction *filter, const guint64 old_timestampdiff_to_process);
+static void            gst_interpreter_interaction_set_property           (GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec);
+static void            gst_interpreter_interaction_get_property           (GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+static gboolean        gst_interpreter_interaction_set_caps               (GstPad *pad, GstCaps *caps);
+static GstFlowReturn   gst_interpreter_interaction_chain                  (GstPad *pad, GstBuffer *buf);
+static gboolean        gst_interpreter_interaction_events_cb              (GstPad *pad, GstEvent *event, gpointer user_data);
+static ObjectList     *gst_interpreter_interaction_include_objects_itens  (GArray *list, gint type_0ojb_1area, gchar *name, GstClockTime timestamp, guint sizeof_relation_item);
+static void            gst_interpreter_interaction_process_events         (GstInterpreterInteraction *filter, const guint64 old_timestampdiff_to_process);
+static TrackedObject  *gst_interpreter_interaction_get_trackedobject      (GArray *list, gchar *name);
 
 // clean up
 static void
@@ -119,10 +132,13 @@ gst_interpreter_interaction_finalize(GObject *obj)
 {
     GstInterpreterInteraction *filter = GST_INTERPRETERINTERACTION(obj);
 
-    if (filter->image)       cvReleaseImage(&filter->image);
-
     // Processes all remaining events
-    process_events(filter, 0);
+    gst_interpreter_interaction_process_events(filter, 0);
+
+    if (filter->image)                          cvReleaseImage(&filter->image);
+    if (filter->objects_in_scene)               g_array_free(filter->objects_in_scene, TRUE);
+    if (filter->event_interaction_in_distance)  g_array_free(filter->event_interaction_in_distance, TRUE);
+    if (filter->event_interaction_in_objects)   g_array_free(filter->event_interaction_in_objects, TRUE);
 
     G_OBJECT_CLASS(parent_class)->finalize(obj);
 }
@@ -167,6 +183,10 @@ gst_interpreter_interaction_class_init(GstInterpreterInteractionClass *klass)
     g_object_class_install_property(gobject_class, PROP_DISPLAY_DATA,
                                     g_param_spec_boolean("display-data", "Display data", "Print data structure",
                                                          FALSE, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_CLOSED_MIN_THRESHOLD,
+                                    g_param_spec_float("closed-min", "Closed min threshold", "Minimum distance that determines the interaction began or end on the object considered",
+                                                         0.0f, 9999.0f, DEFAULT_CLOSED_MIN_THRESHOLD, G_PARAM_READWRITE));
 }
 
 // initialize the new element
@@ -187,12 +207,14 @@ gst_interpreter_interaction_init(GstInterpreterInteraction *filter, GstInterpret
     gst_element_add_pad(GST_ELEMENT(filter), filter->sinkpad);
     gst_element_add_pad(GST_ELEMENT(filter), filter->srcpad);
 
-    filter->verbose                 = FALSE;
-    filter->display                 = FALSE;
-    filter->display_data            = FALSE;
+    filter->verbose                         = FALSE;
+    filter->display                         = FALSE;
+    filter->display_data                    = FALSE;
+    filter->closed_min_threshold            = DEFAULT_CLOSED_MIN_THRESHOLD;
 
-    filter->objects_in_scene        = g_array_sized_new(FALSE, FALSE, sizeof(ObjectList), 1);
-    filter->event_interaction_in    = g_array_sized_new(FALSE, FALSE, sizeof(EventInteractionIn), 1);
+    filter->objects_in_scene                = g_array_sized_new(FALSE, FALSE, sizeof(ObjectList), 1);
+    filter->event_interaction_in_distance   = g_array_sized_new(FALSE, FALSE, sizeof(EventInteractionInDistance), 1);
+    filter->event_interaction_in_objects    = g_array_sized_new(FALSE, FALSE, sizeof(TrackedObject), 1);
 }
 
 static void
@@ -209,6 +231,9 @@ gst_interpreter_interaction_set_property(GObject *object, guint prop_id, const G
             break;
         case PROP_DISPLAY_DATA:
             filter->display_data = g_value_get_boolean(value);
+            break;
+        case PROP_CLOSED_MIN_THRESHOLD:
+            filter->closed_min_threshold = g_value_get_float(value);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -230,6 +255,9 @@ gst_interpreter_interaction_get_property(GObject *object, guint prop_id, GValue 
             break;
         case PROP_DISPLAY_DATA:
             g_value_set_boolean(value, filter->display_data);
+            break;
+        case PROP_CLOSED_MIN_THRESHOLD:
+            g_value_set_float(value, filter->closed_min_threshold);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -254,10 +282,10 @@ gst_interpreter_interaction_set_caps(GstPad *pad, GstCaps *caps)
     gst_structure_get_int(structure, "height", &height);
     gst_structure_get_int(structure, "depth",  &depth);
 
-    filter->image   = cvCreateImage(cvSize(width, height), depth/3, 3);
+    filter->image = cvCreateImage(cvSize(width, height), depth/3, 3);
 
     // add roi event probe on the sinkpad
-    gst_pad_add_event_probe(filter->sinkpad, (GCallback) events_cb, filter);
+    gst_pad_add_event_probe(filter->sinkpad, (GCallback) gst_interpreter_interaction_events_cb, filter);
 
     other_pad = (pad == filter->srcpad) ? filter->sinkpad : filter->srcpad;
     gst_object_unref(filter);
@@ -284,29 +312,44 @@ gst_interpreter_interaction_chain(GstPad *pad, GstBuffer *buf)
     // Update timestamp
     filter->timestamp = GST_BUFFER_TIMESTAMP(buf);
 
-    if ((filter->event_interaction_in != NULL) && (filter->event_interaction_in->len > 0)) {
+    if ((filter->event_interaction_in_distance != NULL) && (filter->event_interaction_in_distance->len > 0)) {
         gint i;
 
-        for (i = filter->event_interaction_in->len - 1; i >= 0; --i) {
+        for (i = filter->event_interaction_in_distance->len - 1; i >= 0; --i) {
 
-            EventInteractionIn event;
-            ObjectList *objectlist_temp;
+            ObjectList                  *objectlist_temp;
+            EventInteractionInDistance  *object_temp_distance;
+            TrackedObject               *object_temp_informations_a, *object_temp_informations_b;
+            gint                         obj_a_type, obj_b_type;
 
-            event = g_array_index(filter->event_interaction_in, EventInteractionIn, i);
+            // Get get distance between objects
+            object_temp_distance = &g_array_index(filter->event_interaction_in_distance, EventInteractionInDistance, i);
 
-            // Include event A->B
-            objectlist_temp = include_objects_itens(filter->objects_in_scene, event.obj_a_id, 1, event.obj_a_name, 0, sizeof (ObjectList));
-            objectlist_temp = include_objects_itens(objectlist_temp->relations, event.obj_b_id, event.type, event.obj_b_name, event.timestamp, sizeof (gfloat));
-            g_array_append_val(objectlist_temp->relations, event.distance);
+            // Get informatios of object of object_temp_distance structure
+            object_temp_informations_a = gst_interpreter_interaction_get_trackedobject(filter->event_interaction_in_objects, object_temp_distance->obj_a_name);
+            object_temp_informations_b = gst_interpreter_interaction_get_trackedobject(filter->event_interaction_in_objects, object_temp_distance->obj_b_name);
+            if(object_temp_informations_a == NULL || object_temp_informations_b == NULL) GST_WARNING_OBJECT(filter, "object information not found");
+            obj_a_type = object_temp_informations_a->type;
+            obj_b_type = object_temp_informations_b->type;
 
-            // Include event B->A
-            objectlist_temp = include_objects_itens(filter->objects_in_scene, event.obj_b_id, event.type, event.obj_b_name, 0, sizeof (ObjectList));
-            objectlist_temp = include_objects_itens(objectlist_temp->relations, event.obj_a_id, 1, event.obj_a_name, event.timestamp, sizeof (gfloat));
-            g_array_append_val(objectlist_temp->relations, event.distance);
+            // Include objectlist A->B
+            objectlist_temp = gst_interpreter_interaction_include_objects_itens(filter->objects_in_scene,   obj_a_type, object_temp_distance->obj_a_name, 0, sizeof (ObjectList));
+            objectlist_temp = gst_interpreter_interaction_include_objects_itens(objectlist_temp->relations, obj_b_type, object_temp_distance->obj_b_name, object_temp_distance->timestamp, sizeof (gfloat));
+            g_array_append_val(objectlist_temp->relations, object_temp_distance->distance);
 
-            g_array_remove_index_fast(filter->event_interaction_in, i);
+            // Include objectlist B->A
+            objectlist_temp = gst_interpreter_interaction_include_objects_itens(filter->objects_in_scene,   obj_b_type, object_temp_distance->obj_b_name, 0, sizeof (ObjectList));
+            objectlist_temp = gst_interpreter_interaction_include_objects_itens(objectlist_temp->relations, obj_a_type, object_temp_distance->obj_a_name, object_temp_distance->timestamp, sizeof (gfloat));
+            g_array_append_val(objectlist_temp->relations, object_temp_distance->distance);
+
+            // Clean the distance structure
+            g_array_remove_index_fast(filter->event_interaction_in_distance, i);
         }
     }
+
+    // Clean objectinformations structure
+    g_array_free(filter->event_interaction_in_objects, TRUE);
+    filter->event_interaction_in_objects = g_array_sized_new(FALSE, FALSE, sizeof(TrackedObject), 1);
 
     // Show the data structure
     if (filter->display_data && filter->objects_in_scene && filter->objects_in_scene->len) {
@@ -317,11 +360,11 @@ gst_interpreter_interaction_chain(GstPad *pad, GstBuffer *buf)
 
         for (j = 0; j < filter->objects_in_scene->len; ++j) {
             objectlist = &g_array_index(filter->objects_in_scene, ObjectList, j);
-            GST_INFO("%s (type_1ojb_0area: %i) - time: %lld\n", objectlist->name, objectlist->type_1ojb_0area, objectlist->last_timestamp);
+            GST_INFO("%s (type_0ojb_1area: %i) - time: %lld\n", objectlist->name, objectlist->type_0ojb_1area, objectlist->last_timestamp);
 
             for (m = 0; m < objectlist->relations->len; ++m) {
                 objectlist2 = &g_array_index(objectlist->relations, ObjectList, m);
-                GST_INFO("\t%s (type_1ojb_0area: %i) - time: %lld\n", objectlist2->name, objectlist2->type_1ojb_0area, objectlist2->last_timestamp);
+                GST_INFO("\t%s (type_0ojb_1area: %i) - time: %lld\n", objectlist2->name, objectlist2->type_0ojb_1area, objectlist2->last_timestamp);
 
                 for (k = 0; k < objectlist2->relations->len; ++k) {
                     dist = g_array_index(objectlist2->relations, gfloat, k);
@@ -333,7 +376,7 @@ gst_interpreter_interaction_chain(GstPad *pad, GstBuffer *buf)
     }
 
     // Processes finalized events
-    process_events(filter, OLD_TIMESTAMPDIFF_TO_PROCESS);
+    gst_interpreter_interaction_process_events(filter, OLD_TIMESTAMPDIFF_TO_PROCESS);
 
     gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
     return gst_pad_push(filter->srcpad, buf);
@@ -341,7 +384,7 @@ gst_interpreter_interaction_chain(GstPad *pad, GstBuffer *buf)
 
 // callbacks
 static
-gboolean events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
+gboolean gst_interpreter_interaction_events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
 {
     GstInterpreterInteraction  *filter;
     const GstStructure *structure;
@@ -355,71 +398,80 @@ gboolean events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
 
     structure = gst_event_get_structure(event);
 
-    if ((structure != NULL) && (strcmp(gst_structure_get_name(structure), "object-areainteraction") == 0)) {
+    // Get object informations
+    if ((structure != NULL) && (strcmp(gst_structure_get_name(structure), "tracked-object") == 0)) {
+        TrackedObject *object;
+        object = tracked_object_from_structure(structure);
+        g_array_append_val(filter->event_interaction_in_objects, *object);
+    }
 
-        EventInteractionIn oi;
-
+    // Get object distance
+    if ((structure != NULL) && (strcmp(gst_structure_get_name(structure), "tracked-objects-distance") == 0)) {
+        EventInteractionInDistance oi;
         gst_structure_get((GstStructure*) structure,
-
-              "obj_a_id",     G_TYPE_UINT,    &oi.obj_a_id,
-              "obj_a_name",   G_TYPE_STRING,  &oi.obj_a_name,
-              "obj_a_x",      G_TYPE_UINT,    &oi.obj_a_x,
-              "obj_a_y",      G_TYPE_UINT,    &oi.obj_a_y,
-
-              "obj_b_id",     G_TYPE_UINT,    &oi.obj_b_id,
-              "obj_b_name",   G_TYPE_STRING,  &oi.obj_b_name,
-              "obj_b_x",      G_TYPE_UINT,    &oi.obj_b_x,
-              "obj_b_y",      G_TYPE_UINT,    &oi.obj_b_y,
-
-              "distance",     G_TYPE_FLOAT,   &oi.distance,
-              "type",         G_TYPE_UINT,    &oi.type,
-              "timestamp",    G_TYPE_UINT64,  &oi.timestamp,
-
+              "obj1",       G_TYPE_STRING,  &oi.obj_a_name,
+              "obj2",       G_TYPE_STRING,  &oi.obj_b_name,
+              "distance",   G_TYPE_FLOAT,   &oi.distance,
+              "timestamp",  G_TYPE_UINT64,  &oi.timestamp,
               NULL);
-
-        g_array_append_val(filter->event_interaction_in, oi);
+        g_array_append_val(filter->event_interaction_in_distance, oi);
     }
 
     return TRUE;
 }
 
 static ObjectList *
-include_objects_itens(GArray * list, gint id, gint type_1ojb_0area, gchar *name, GstClockTime timestamp, guint sizeof_relation_item)
+gst_interpreter_interaction_include_objects_itens(GArray *list, gint type_0ojb_1area, gchar *name, GstClockTime timestamp, guint sizeof_relation_item)
 {
-    guint i;
-    ObjectList  *objectlist_temp;
+    guint       i;
+    ObjectList *objectlist_temp;
 
     // Find object in list
     for (i = 0; i < list->len; ++i) {
         objectlist_temp = &g_array_index(list, ObjectList, i);
-        if (objectlist_temp->id == id && objectlist_temp->type_1ojb_0area == type_1ojb_0area)
+        if (strcmp(objectlist_temp->name, name ) == 0)
             break;
     }
 
     // If not exist, include. If not, update
     if (i >= list->len) {
         objectlist_temp = (ObjectList *) g_malloc(sizeof (ObjectList));
-        objectlist_temp->id = id;
-        objectlist_temp->type_1ojb_0area = type_1ojb_0area;
-        objectlist_temp->relations = g_array_sized_new(FALSE, FALSE, sizeof_relation_item, 1);
-        objectlist_temp->name = g_strdup_printf("%s", name);
-        objectlist_temp->last_timestamp = timestamp;
+        objectlist_temp->type_0ojb_1area    = type_0ojb_1area;
+        objectlist_temp->relations          = g_array_sized_new(FALSE, FALSE, sizeof_relation_item, 1);
+        objectlist_temp->name               = g_strdup_printf("%s", name);
+        objectlist_temp->last_timestamp     = timestamp;
         g_array_append_val(list, *objectlist_temp);
     } else {
-        objectlist_temp->last_timestamp = timestamp;
+        objectlist_temp->last_timestamp     = timestamp;
     }
 
     // Return its point
     return objectlist_temp;
 }
 
+static TrackedObject *
+gst_interpreter_interaction_get_trackedobject(GArray *list, gchar *name)
+{
+    guint          i;
+    TrackedObject *object_temp;
+
+    // Find object in list
+    for (i = 0; i < list->len; ++i) {
+        object_temp = &g_array_index(list, TrackedObject, i);
+        if (strcmp(object_temp->id, name ) == 0)
+            return object_temp;
+    }
+
+    return NULL;
+}
+
 static void
-process_events(GstInterpreterInteraction *filter, const guint64 old_timestampdiff_to_process) {
+gst_interpreter_interaction_process_events(GstInterpreterInteraction *filter, const guint64 old_timestampdiff_to_process) {
 
     if (filter->objects_in_scene && filter->objects_in_scene->len) {
 
-        gint j, m;
-        guint k;
+        gint        j, m;
+        guint       k;
         ObjectList *objectlist;
         ObjectList *objectlist2;
 
@@ -452,54 +504,61 @@ process_events(GstInterpreterInteraction *filter, const guint64 old_timestampdif
                         }
                         perc_hit = (!(sum_neg + sum_pos)) ? 0 : (sum_neg + sum_pos) / (val_max - val_min);
 
+                        // Jump inconclusive situations
                         if (perc_hit >= MIN_PERC_HIT) {
 
-                            char *label;
-                            GstEvent *event;
-                            GstMessage *message;
-                            GstStructure *structure;
+                            char          *label;
+                            GstEvent      *event;
+                            GstMessage    *message;
+                            GstStructure  *structure;
 
-                            // Manual processing of events
-                            if (!objectlist->type_1ojb_0area) continue; // area->obj interaction
-                            if (
-                                    (!objectlist->type_1ojb_0area || !objectlist2->type_1ojb_0area) &&
-                                    (sum_pos > sum_neg) &&
-                                    g_array_index(objectlist2->relations, gfloat, 0) <= 2
-                                    ) {
-                                label = g_strdup_printf("walked out the");
-                            } else {
-                                if (i_min != 0 && i_min != objectlist2->relations->len && perc_hit != 1) {
-                                    label = g_strdup_printf("spent by");
+                            // Manual processing of events. Only obj->obj or obj->area interaction
+                            if (!objectlist->type_0ojb_1area){
+
+                                // If the object is an area, identify if other object left him out
+                                if (    objectlist2->type_0ojb_1area &&
+                                        perc_hit >= MIN_PERC_HIT_TO_CLOSED &&
+                                        (sum_pos > -sum_neg) &&
+                                        g_array_index(objectlist2->relations, gfloat, 0) <= filter->closed_min_threshold) {
+                                    label = g_strdup_printf("walked out the");
                                 } else {
-                                    if (sum_pos > sum_neg) {
-                                        label = g_strdup_printf("departed");
+
+                                    // If there is divergence of the distance signal, evaluates the possibility of A 'spent by' B
+                                    if(     i_min != 0 &&
+                                            val_min <= filter->closed_min_threshold &&
+                                            i_min != objectlist2->relations->len &&
+                                            perc_hit < MIN_PERC_HIT_TO_CLOSED) {
+                                        label = g_strdup_printf("spent by");
                                     } else {
-                                        label = g_strdup_printf("approached");
+
+                                        // In the latter case, saying A approached or departed of B
+                                        if (sum_pos > -sum_neg)
+                                            label = g_strdup_printf("departed");
+                                        else
+                                            label = g_strdup_printf("approached");
                                     }
                                 }
+
+                                if (filter->verbose) {
+                                    GST_INFO("%s '%s' %s (perc_hit: %1.2f)", objectlist->name, label, objectlist2->name, perc_hit);
+                                }
+
+                                // Send downstream event
+                                structure = gst_structure_new("object-interpreterinteraction",
+                                        "obj_a_name",   G_TYPE_STRING,  objectlist->name,
+                                        "obj_b_name",   G_TYPE_STRING,  objectlist2->name,
+                                        "event",        G_TYPE_STRING,  label,
+                                        "timestamp",    G_TYPE_UINT64,  objectlist2->last_timestamp,
+                                        "perc_hit",     G_TYPE_FLOAT,   perc_hit,
+                                        NULL);
+
+                                message = gst_message_new_element(GST_OBJECT(filter), gst_structure_copy(structure));
+                                gst_element_post_message(GST_ELEMENT(filter), message);
+                                event = gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM, structure);
+                                gst_pad_push_event(filter->srcpad, event);
+
+                                g_free(label);
                             }
-
-                            if (filter->verbose) {
-                                GST_INFO("%s '%s' %s (perc_hit: %1.2f)", objectlist->name, label, objectlist2->name, perc_hit);
-                            }
-
-                            // Send downstream event
-                            structure = gst_structure_new("object-interpreterinteraction",
-                                    "obj_a_id",     G_TYPE_UINT,    objectlist->id,
-                                    "obj_a_name",   G_TYPE_STRING,  objectlist->name,
-                                    "obj_b_id",     G_TYPE_UINT,    objectlist2->id,
-                                    "obj_b_name",   G_TYPE_STRING,  objectlist2->name,
-                                    "event",        G_TYPE_STRING,  label,
-                                    "timestamp",    G_TYPE_UINT64,  objectlist2->last_timestamp,
-                                    "perc_hit",     G_TYPE_FLOAT,   perc_hit,
-                                    NULL);
-
-                            message = gst_message_new_element(GST_OBJECT(filter), gst_structure_copy(structure));
-                            gst_element_post_message(GST_ELEMENT(filter), message);
-                            event = gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM, structure);
-                            gst_pad_push_event(filter->srcpad, event);
-
-                            g_free(label);
                         }
                     }
 
@@ -507,6 +566,9 @@ process_events(GstInterpreterInteraction *filter, const guint64 old_timestampdif
                     g_array_remove_index_fast(objectlist->relations, m);
                 }
             }
+
+            if(!objectlist->relations->len)
+                g_array_remove_index_fast(filter->objects_in_scene, j);
         }
     }
 }
