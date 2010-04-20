@@ -57,7 +57,7 @@
  * gst-launch-0.10 videotestsrc ! decodebin ! ffmpegcolorspace !
  *                 staticobjects verbose=true
  *                               display=true
- *                               objects=390x126,390x364,400x393,400x126:100 !
+ *                               objects=meeting-room-door,240,392,367,397,387\;kitchen-door,191,288,318,360,31 !
  *                 ffmpegcolorspace ! xvimagesink sync=false
  * ]|
  * </refsect2>
@@ -111,7 +111,7 @@ static void          gst_static_objects_get_property       (GObject *object, gui
 static gboolean      gst_static_objects_set_caps           (GstPad *pad, GstCaps *caps);
 static GstFlowReturn gst_static_objects_chain              (GstPad *pad, GstBuffer *buf);
 static GArray*       make_point_array                      (const gchar *str);
-static gboolean      gst_static_objects_parse_objects_str (GstStaticObjects *filter);
+static gboolean      gst_static_objects_parse_objects_str  (GstStaticObjects *filter);
 
 static void
 gst_static_objects_finalize(GObject *obj)
@@ -286,6 +286,7 @@ gst_static_objects_chain(GstPad *pad, GstBuffer *buf)
     for (iter = filter->objects_list; iter != NULL; iter = iter->next) {
         TrackedObject *tracked_object;
         GstEvent      *event;
+        GstStructure  *structure;
 
         tracked_object = iter->data;
 
@@ -323,8 +324,13 @@ gst_static_objects_chain(GstPad *pad, GstBuffer *buf)
             }
         }
 
-        event = gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM,
-                                     tracked_object_to_structure(tracked_object, "tracked-object"));
+        // now, send a new event with the new object
+        if ((structure = tracked_object_to_structure(tracked_object, "tracked-object")) == NULL) {
+            GST_WARNING_OBJECT(filter, "unable to build structure from tracked object \"%d\"", tracked_object->id);
+            continue;
+        }
+
+        event = gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM, structure);
         gst_pad_push_event(filter->srcpad, event);
     }
 
