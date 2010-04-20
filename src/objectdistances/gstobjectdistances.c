@@ -313,7 +313,7 @@ gst_object_distances_chain(GstPad *pad, GstBuffer *buf)
                                           "obj1",      G_TYPE_STRING, tracked_object1->id,
                                           "obj2",      G_TYPE_STRING, tracked_object2->id,
                                           "distance",  G_TYPE_FLOAT,  distance,
-                                          "timestamp", G_TYPE_FLOAT,  tracked_object1->timestamp,
+                                          "timestamp", G_TYPE_UINT64, tracked_object1->timestamp,
                                           NULL);
             event = gst_event_new_custom(GST_EVENT_CUSTOM_DOWNSTREAM, structure);
             gst_pad_push_event(filter->srcpad, event);
