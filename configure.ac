@@ -167,6 +167,9 @@ AC_OUTPUT([
     src/objectdistances/Makefile
     src/objectsareainteraction/Makefile
     src/objectsinteraction/Makefile
+    src/onlineboost/Makefile
+    src/onlineboost/imageio/Makefile
+    src/onlineboost/trackers/Makefile
     src/optflowtracker/Makefile
     src/pyramidsegment/Makefile
     src/staticobjects/Makefile

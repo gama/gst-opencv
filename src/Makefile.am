@@ -16,6 +16,7 @@ SUBDIRS =																			\
 	objectdistances																	\
 	objectsareainteraction															\
 	objectsinteraction																\
+	onlineboost																		\
 	optflowtracker																	\
 	pyramidsegment																	\
 	staticobjects																	\
@@ -47,6 +48,7 @@ libgstopencv_la_CFLAGS =															\
 	-I${top_srcdir}/src/objectdistances												\
 	-I${top_srcdir}/src/objectsareainteraction										\
 	-I${top_srcdir}/src/objectsinteraction											\
+	-I${top_srcdir}/src/onlineboost													\
 	-I${top_srcdir}/src/optflowtracker												\
 	-I${top_srcdir}/src/pyramidsegment												\
 	-I${top_srcdir}/src/staticobjects												\
@@ -74,6 +76,7 @@ libgstopencv_la_LIBADD =															\
 	$(top_builddir)/src/objectdistances/libgstobjectdistances.la					\
 	$(top_builddir)/src/objectsareainteraction/libgstobjectsareainteraction.la		\
 	$(top_builddir)/src/objectsinteraction/libgstobjectsinteraction.la				\
+	$(top_builddir)/src/onlineboost/libonlineboost.la								\
 	$(top_builddir)/src/optflowtracker/libgstoptflowtracker.la						\
 	$(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la						\
 	$(top_builddir)/src/staticobjects/libgststaticobjects.la						\
@@ -102,6 +105,7 @@ libgstopencv_la_DEPENDENCIES =														\
 	$(top_builddir)/src/objectdistances/libgstobjectdistances.la					\
 	$(top_builddir)/src/objectsareainteraction/libgstobjectsareainteraction.la		\
 	$(top_builddir)/src/objectsinteraction/libgstobjectsinteraction.la				\
+	$(top_builddir)/src/onlineboost/libonlineboost.la								\
 	$(top_builddir)/src/optflowtracker/libgstoptflowtracker.la						\
 	$(top_builddir)/src/pyramidsegment/libgstpyramidsegment.la						\
 	$(top_builddir)/src/staticobjects/libgststaticobjects.la						\
