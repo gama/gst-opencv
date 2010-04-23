@@ -44,64 +44,48 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_INTERPRETERINTERACTION_H__
-#define __GST_INTERPRETERINTERACTION_H__
+#ifndef __GST_INTERPRETER_INTERACTION_H__
+#define __GST_INTERPRETER_INTERACTION_H__
 
 #include <gst/gst.h>
 #include <cv.h>
 
 G_BEGIN_DECLS
 
-#define GST_TYPE_INTERPRETERINTERACTION            (gst_interpreter_interaction_get_type())
-#define GST_INTERPRETERINTERACTION(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_INTERPRETERINTERACTION,GstInterpreterInteraction))
-#define GST_INTERPRETERINTERACTION_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_INTERPRETERINTERACTION,GstInterpreterInteractionClass))
-#define GST_IS_INTERPRETERINTERACTION(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_INTERPRETERINTERACTION))
-#define GST_IS_INTERPRETERINTERACTION_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_INTERPRETERINTERACTION))
+#define GST_TYPE_INTERPRETER_INTERACTION            (gst_interpreter_interaction_get_type())
+#define GST_INTERPRETER_INTERACTION(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_INTERPRETER_INTERACTION,GstInterpreterInteraction))
+#define GST_INTERPRETER_INTERACTION_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_INTERPRETER_INTERACTION,GstInterpreterInteractionClass))
+#define GST_IS_INTERPRETER_INTERACTION(obj)         (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_INTERPRETER_INTERACTION))
+#define GST_IS_INTERPRETER_INTERACTION_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_INTERPRETER_INTERACTION))
 
 typedef struct _GstInterpreterInteraction GstInterpreterInteraction;
 typedef struct _GstInterpreterInteractionClass GstInterpreterInteractionClass;
 typedef struct _ObjectList ObjectList;
 typedef struct _EventInteractionInDistance EventInteractionInDistance;
 
-struct _ObjectList
-{
-    GstClockTime             last_timestamp;
-    GArray                  *relations;
-    gint                     type_0ojb_1area;
-    gchar                   *name;
-};
-
-struct _EventInteractionInDistance
-{
-    gchar                   *obj_a_name;
-    gchar                   *obj_b_name;
-    gfloat                   distance;
-    GstClockTime             timestamp;
-};
-
 struct _GstInterpreterInteraction
 {
-    GstElement               element;
+    GstElement    element;
 
-    GstPad                  *sinkpad;
-    GstPad                  *srcpad;
+    GstPad       *sinkpad;
+    GstPad       *srcpad;
 
-    IplImage                *image;
-    gboolean                 verbose;
-    gboolean                 display;
-    gboolean                 display_data;
-    gfloat                   closed_min_threshold;
+    IplImage     *image;
+    gboolean      verbose;
+    gboolean      display;
+    gboolean      display_data;
+    gfloat        closed_min_threshold;
 
-    GArray                  *objects_in_scene;
+    GArray       *objects_in_scene;
 
-    GArray                  *event_interaction_in_distance;
-    GArray                  *event_interaction_in_objects;
-    GstClockTime             timestamp;
+    GArray       *event_interaction_in_distance;
+    GArray       *event_interaction_in_objects;
+    GstClockTime  timestamp;
 };
 
 struct _GstInterpreterInteractionClass
 {
-    GstElementClass          parent_class;
+    GstElementClass parent_class;
 };
 
 GType    gst_interpreter_interaction_get_type    (void);
@@ -109,4 +93,4 @@ gboolean gst_interpreter_interaction_plugin_init (GstPlugin *plugin);
 
 G_END_DECLS
 
-#endif /* __GST_INTERPRETERINTERACTION_H__ */
+#endif // __GST_INTERPRETER_INTERACTION_H__

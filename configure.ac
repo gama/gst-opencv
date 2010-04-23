@@ -161,11 +161,11 @@ AC_OUTPUT([
     src/haaradjust/Makefile
     src/haardetect/Makefile
     src/homography/Makefile
+    src/interpreterinteraction/Makefile
     src/lkopticalflow/Makefile
     src/motiontemplate/Makefile
     src/objectdistances/Makefile
     src/objectsareainteraction/Makefile
-    src/interpreterinteraction/Makefile
     src/objectsinteraction/Makefile
     src/optflowtracker/Makefile
     src/pyramidsegment/Makefile
