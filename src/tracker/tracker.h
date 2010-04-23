@@ -4,7 +4,7 @@
  * Copyright (C) 2005 Ronald S. Bultje <rbultje@ronald.bitfreak.net>
  * Copyright (C) 2008 Michael Sheldon <mike@mikeasoft.com>
  * Copyright (C) 2010 Erickson Rangel do Nascimento <erickson@vettalabs.com>
- * 
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
  * to deal in the Software without restriction, including without limitation
@@ -44,79 +44,35 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_TRACKER_H__
-#define __GST_TRACKER_H__
+#ifndef __TRACKER_H__
+#define __TRACKER_H__
 
 #include <gst/gst.h>
 #include <cv.h>
-#include <highgui.h>
 #include <cvaux.h>
 
-#define MIN_AREA_MOTION_CONSIDERED (40*40)
+typedef struct _Tracker Tracker;
 
-G_BEGIN_DECLS
-/* #defines don't like whitespacey bits */
-#define GST_TYPE_TRACKER \
-    (gst_tracker_get_type())
-#define GST_TRACKER(obj) \
-    (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_TRACKER,GstTracker))
-#define GST_TRACKER_CLASS(klass) \
-    (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_TRACKER,GstTrackerClass))
-#define GST_IS_TRACKER(obj) \
-    (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_TRACKER))
-#define GST_IS_TRACKER_CLASS(klass) \
-    (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_TRACKER))
-typedef struct _GstTracker GstTracker;
-typedef struct _GstTrackerClass GstTrackerClass;
-
-struct _GstTracker
+struct _Tracker
 {
-    GstElement element;
-    GstPad *sinkpad, *srcpad;
-
-    IplImage *image, *grey, *prev_grey, *pyramid, *prev_pyramid;
-    CvPoint2D32f *points[2];
-    char *status;
-    guint flags;
-    guint count;
-    float prev_avg_x;
-    gboolean initialized;
-
-    // filter parameter
-    gboolean verbose;
-    gboolean tracker_by_motion;
-    gboolean show_particles;
-    gboolean show_features;
-    gboolean show_features_box;
-    gboolean show_borders;
-    guint max_points;
-    guint min_points;
-    guint win_size;
-    float movement_threshold;
-
-
-    CvConDensation* ConDens;
-    int state_dim, measurement_dim;
-    int sample_size;
-
-    int width_image, height_image;
-
-    int nframesToLearnBG;
-    int framesProcessed;
-    CvBGCodeBookModel* backgroundModel;
-    IplImage* background;
-
-    IplImage* cvMotion;
+    guint          *id;
+    CvConDensation *filter;
+    guint           num_particles;
+    gfloat          mi;
+    gfloat          gama;
+    gfloat          beta;
+    CvRect          detected_object;
 };
 
-struct _GstTrackerClass
-{
-    GstElementClass parent_class;
-};
+Tracker*        tracker_new  (CvRect region,
+                              gint   state_vec_dim,
+                              gint   measurement_vec_dim,
+                              gint   num_particles,
+                              CvRect image);
 
-GType gst_tracker_get_type (void);
+void            tracker_free (Tracker *tracker);
 
-gboolean gst_tracker_plugin_init (GstPlugin *plugin);
+void            tracker_run  (Tracker *tracker,
+                              CvRect   closer_tracker_with_a_detected_obj);
 
-G_END_DECLS
-#endif /* __GST_TRACKER_H__ */
+#endif // __GST_TRACKER_H__

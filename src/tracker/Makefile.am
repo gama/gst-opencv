@@ -6,6 +6,7 @@ noinst_LTLIBRARIES = libgsttracker.la
 libgsttracker_la_SOURCES =								\
 	gsttracker.c										\
 	identifier.c										\
+	tracker.c											\
 	$(NULL)
 
 # flags used to compile this plugin
@@ -32,5 +33,6 @@ libgsttracker_la_DEPENDENCIES =							\
 noinst_HEADERS =										\
 	gsttracker.h										\
 	identifier.h										\
+	tracker.h											\
 	$(NULL)
 

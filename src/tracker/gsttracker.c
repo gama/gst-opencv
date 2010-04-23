@@ -3,8 +3,8 @@
  * Copyright (C) 2005 Thomas Vander Stichele <thomas@apestaart.org>
  * Copyright (C) 2005 Ronald S. Bultje <rbultje@ronald.bitfreak.net>
  * Copyright (C) 2008 Michael Sheldon <mike@mikeasoft.com>
- * Copyright (C) 2009 Gustavo Machado C. Gama <gama@vettalabs.com>
- * 
+ * Copyright (C) 2010 Erickson Range do Nascimento <erickson@vettalabs.com>
+ *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
  * to deal in the Software without restriction, including without limitation
@@ -87,7 +87,7 @@ static const float F[] = { 1, 1, 0, 1 };
 
 #define DEFAULT_FRAMES_LEARN_BG         50
 #define DEFAULT_MIN_FRAMES_TO_LEARN_BG  5
-#define DEFAULT_MAX_FRAMES_TO_LEARN_BG  200 
+#define DEFAULT_MAX_FRAMES_TO_LEARN_BG  200
 
 #define DEFAULT_BGMODEL_MODMIN_0     3
 #define DEFAULT_BGMODEL_MODMIN_1     3
@@ -282,7 +282,7 @@ gst_tracker_init(GstTracker * filter, GstTrackerClass * gclass)
 
     filter->nframesToLearnBG   = DEFAULT_FRAMES_LEARN_BG;
     filter->framesProcessed    = 0;
-    
+
     filter->backgroundModel = cvCreateBGCodeBookModel();
     filter->backgroundModel->modMin[0]      = DEFAULT_BGMODEL_MODMIN_0;
     filter->backgroundModel->modMax[0]      = DEFAULT_BGMODEL_MODMAX_0;
@@ -450,6 +450,33 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
 
 
+    #if 0
+
+    // FIXME: implement pseudo-code below
+
+    detected_obj_count[new_detected_obj]++;
+    if ( detected_obj_count >= num_subsequet_detections) {
+        detected_objects[num_detected_obj] = new_detected_obj;
+        num_detected_obj++;
+
+        new_tracker = create_tracker( new_detection.region );
+        trackers[num_tracker] = new_tracker;
+        num_tracker++;
+    }
+
+    // data association
+    match( detected_objects, trackers );
+
+    // tracking
+    for (int tr = 0; tr < num_tracker; tr++){
+        tracker = trackers[tr];
+        closer_tracker_with_a_detected_obj = _with_a_detected_obj_to( tracker );
+        tracker.run( closer_tracker_with_a_detected_obj );
+    }
+
+    #endif
+
+
     // If use background, do trainning
     if(!filter->tracker_by_motion){
 
@@ -469,7 +496,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
 
 
     if (!filter->initialized || filter->count < filter->min_points) {
-        
+
         // automatic initialization
         IplImage* eig       = cvCreateImage(cvGetSize(filter->grey), 32, 1);
         IplImage* temp      = cvCreateImage(cvGetSize(filter->grey), 32, 1);
@@ -551,7 +578,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
         vetCentroids[0].x = measurement_x;
         vetCentroids[0].y = measurement_y;
         updateCondensation(filter->image, filter->ConDens, vetCentroids, 1, filter->show_particles);
-        
+
         predicted_x = filter->ConDens->State[0];
         predicted_y = filter->ConDens->State[1];
 
@@ -599,7 +626,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
 
         // Draw feature box if required
         if (filter->show_features_box && (featuresBox.height+featuresBox.width) != 0)
-            cvRectangle(filter->image, 
+            cvRectangle(filter->image,
                         cvPoint(featuresBox.x, featuresBox.y),
                         cvPoint(featuresBox.x+featuresBox.width, featuresBox.y+featuresBox.height),
                         CV_RGB(0, 255, 255), 1, 0, 0 );
@@ -625,7 +652,6 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     CV_SWAP(filter->prev_grey, filter->grey, swap_temp);
     CV_SWAP(filter->prev_pyramid, filter->pyramid, swap_temp);
     CV_SWAP(filter->points[0], filter->points[1], swap_points);
-
     gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
     return gst_pad_push(filter->srcpad, buf);
 }
