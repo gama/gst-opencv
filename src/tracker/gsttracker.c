@@ -57,6 +57,8 @@
  * </refsect2>
  */
 
+#define breitenstein_tracking_algorithm_implemented 1
+
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
 #endif
@@ -114,6 +116,7 @@ enum {
     PROP_FRAMES_LEARN_BG,
     PROP_TRACKER_BY_MOTION
 };
+
 
 /* the capabilities of the inputs and outputs.
 */
@@ -433,6 +436,125 @@ gst_tracker_set_caps(GstPad * pad, GstCaps * caps)
     return gst_pad_set_caps(otherpad, caps);
 }
 
+#if breitenstein_tracking_algorithm_implemented
+
+
+static GSList* has_intersection(CvRect *obj, GSList *objects);
+static void associate_detected_obj_to_tracker(GSList *detected_objects, GSList *trackers, GSList *unassociated_objects);
+static Tracker* closer_tracker_with_a_detected_obj_to(Tracker* tracker, GSList* trackers);
+
+
+typedef struct unassociated_obj_t {
+    CvRect region;
+    guint count;       
+} unassociated_obj_t;
+
+
+// FIXME implement the greedy algorithm
+void associate_detected_obj_to_tracker(GSList *detected_objects, GSList *trackers, GSList *unassociated_objects) 
+{
+    Tracker *closer_tracker, *tracker;
+    gfloat min_dist, dist;
+    CvRect *detected_obj;
+    GSList *it_detected_obj, *it_tracker;
+
+    // FIXME: select other threshold
+    gfloat dist_threshold = 7.0;
+
+    for (it_detected_obj = detected_objects; it_detected_obj; it_detected_obj = it_detected_obj->next) {
+        detected_obj = (CvRect*)it_detected_obj->data;
+
+        closer_tracker->detected_object = NULL;
+        for (it_tracker = trackers; it_tracker; it_tracker = it_tracker->next) {
+            tracker = (Tracker*)it_tracker->data;
+            dist = euclidian_distance(rect_centroid(detected_obj), tracker->centroid);
+            if (dist < min_dist)
+            {
+                min_dist = dist;
+                closer_tracker = tracker;    
+            }
+        }
+        if (min_dist <= dist_threshold)
+            closer_tracker->detected_object = detected_obj;
+        else 
+            unassociated_objects = g_slist_prepend(unassociated_objects, detected_obj);
+    }
+}
+
+static gfloat max(gfloat n1, gfloat n2)
+{
+    return n1 > n2 ? n1 : n2;    
+}
+
+static gfloat min(gfloat n1, gfloat n2)
+{
+    return n1 < n2 ? n1 : n2;    
+}
+
+
+/* search and return the closer 
+ * region with intersection of obj */
+GSList*
+has_intersection(CvRect *obj, GSList *objects)
+{
+    gfloat dist, min_dist;
+    GSList* correspondent_obj = NULL;
+    CvRect rect;
+    CvPoint center;
+    GSList *it_obj;
+    gfloat left, top, right, bottom;
+
+    min_dist = G_MAXFLOAT;
+    center = rect_centroid(obj);
+
+    for (it_obj = objects; it_obj; it_obj = it_obj->next) {
+        
+        rect = ((unassociated_obj_t*)it_obj->data)->region;
+   
+        left   = max(obj->x, rect.x + rect.width);
+        top    = max(obj->y, rect.y);
+        right  = min(obj->x + obj->width, rect.x + rect.width );
+        bottom = min(obj->y + obj->height, rect.y + rect.height);
+
+        if ( right > left && bottom > top )
+        {
+            dist = euclidian_distance(center, rect_centroid(&rect));    
+            if (dist < min_dist)
+            {
+                correspondent_obj = it_obj->data;
+                min_dist = dist;
+            }
+        }
+
+    }
+    return correspondent_obj;
+}
+
+Tracker*
+closer_tracker_with_a_detected_obj_to(Tracker* tracker, GSList* trackers)
+{
+    gfloat dist, min_dist;
+    Tracker *tr, *closer_tracker;
+    GSList *it_tracker;
+
+    min_dist = G_MAXFLOAT;
+    for (it_tracker = trackers; it_tracker; it_tracker = it_tracker->next) 
+    {
+        tr = (Tracker*)it_tracker->data;
+        
+        if (tr->detected_object != NULL){
+            dist = euclidian_distance(tracker->centroid, tr->centroid);
+            if (dist < min_dist){
+                closer_tracker = tr;
+                min_dist = dist;
+            }
+            
+        }    
+    }
+    return closer_tracker;
+}
+#endif 
+
 /* chain function
  * this function does the actual processing
  */
@@ -443,6 +565,35 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     IplImage *swap_temp;
     CvPoint2D32f *swap_points;
     float avg_x = 0.0;
+   
+   
+    #if breitenstein_tracking_algorithm_implemented
+    GSList *unassociated_objects = NULL;
+    unassociated_obj_t *unassociated_obj = NULL;
+
+    GSList *detected_objects = NULL;
+    CvArr  *detection_confidence = NULL;
+
+    GSList *it_obj = NULL;
+    GSList *it_tracker = NULL;
+    GSList *intersection_last_frame = NULL;
+
+    // select a better threshold
+    guint num_subsequent_detections = 5;
+
+    Tracker *new_tracker = NULL;
+    Tracker *tracker = NULL;
+    Tracker *closer_tracker = NULL;
+
+    // choose better values
+    gfloat beta = 0.1;
+    gfloat gama = 0.2;
+    gfloat mi   = 0.3;
+
+    guint  num_particles = 100;
+
+
+    #endif 
 
     filter = GST_TRACKER(GST_OBJECT_PARENT(pad));
     filter->image->imageData = (char *) GST_BUFFER_DATA(buf);
@@ -450,30 +601,46 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
 
 
-    #if 0
+    #if breitenstein_tracking_algorithm_implemented
 
     // FIXME: implement pseudo-code below
 
-    detected_obj_count[new_detected_obj]++;
-    if ( detected_obj_count >= num_subsequet_detections) {
-        detected_objects[num_detected_obj] = new_detected_obj;
-        num_detected_obj++;
-
-        new_tracker = create_tracker( new_detection.region );
-        trackers[num_tracker] = new_tracker;
-        num_tracker++;
-    }
-
     // data association
-    match( detected_objects, trackers );
+    associate_detected_obj_to_tracker(detected_objects, filter->trackers, unassociated_objects);
+
+    // creating tracker for new detected object
+    for (it_obj = unassociated_objects; it_obj; it_obj = it_obj->next) {
+        intersection_last_frame = has_intersection((CvRect*)it_obj->data, filter->unassociated_objects_last_frame);
+        if (intersection_last_frame != NULL) {
+            unassociated_obj = ((unassociated_obj_t*)intersection_last_frame);
+            unassociated_obj->count++;
+            unassociated_obj->region = *((CvRect*)it_obj->data); // update the region
+
+            if (unassociated_obj->count >= num_subsequent_detections) {
+                new_tracker = tracker_new( &unassociated_obj->region, 2, 2, num_particles, filter->image, beta, gama, mi );
+                filter->trackers = g_slist_prepend(filter->trackers, new_tracker);
+
+                filter->unassociated_objects_last_frame = g_slist_remove(filter->unassociated_objects_last_frame, intersection_last_frame);
+                g_free(unassociated_obj);
+            }
+        }
+        else {
+            unassociated_obj = g_new(unassociated_obj_t, 1);
+            unassociated_obj->region = *((CvRect*)it_obj->data);
+            unassociated_obj->count = 0;
+            filter->unassociated_objects_last_frame = g_slist_prepend( filter->unassociated_objects_last_frame, unassociated_obj );
+        }
+    }
 
     // tracking
-    for (int tr = 0; tr < num_tracker; tr++){
-        tracker = trackers[tr];
-        closer_tracker_with_a_detected_obj = _with_a_detected_obj_to( tracker );
-        tracker.run( closer_tracker_with_a_detected_obj );
+    for (it_tracker = filter->trackers; it_tracker; it_tracker = it_tracker->next) {
+        tracker = (Tracker*)it_tracker->data;
+
+        closer_tracker = closer_tracker_with_a_detected_obj_to( tracker, filter->trackers );
+        tracker_run(tracker, closer_tracker, detection_confidence);
     }
 
+    g_slist_free(unassociated_objects);
     #endif
 
 

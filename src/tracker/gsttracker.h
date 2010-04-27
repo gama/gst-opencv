@@ -52,6 +52,8 @@
 #include <highgui.h>
 #include <cvaux.h>
 
+#include "tracker.h"
+
 #define MIN_AREA_MOTION_CONSIDERED (40*40)
 
 G_BEGIN_DECLS
@@ -107,6 +109,10 @@ struct _GstTracker
     IplImage* background;
 
     IplImage* cvMotion;
+
+    // breitenstein tracking algorithm
+    GSList *trackers;
+    GSList *unassociated_objects_last_frame;
 };
 
 struct _GstTrackerClass

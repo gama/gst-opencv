@@ -61,18 +61,27 @@ struct _Tracker
     gfloat          mi;
     gfloat          gama;
     gfloat          beta;
-    CvRect          detected_object;
+    CvRect          *detected_object;
+    CvPoint         centroid;
 };
 
-Tracker*        tracker_new  (CvRect region,
-                              gint   state_vec_dim,
-                              gint   measurement_vec_dim,
-                              gint   num_particles,
-                              CvRect image);
+Tracker*        tracker_new     (const      CvRect *region,
+                                gint        state_vec_dim,
+                                gint        measurement_vec_dim,
+                                gint        num_particles,
+                                IplImage    *image,
+                                gfloat      beta, 
+                                gfloat      gama, 
+                                gfloat      mi);
 
-void            tracker_free (Tracker *tracker);
+void            tracker_free    (Tracker    *tracker);
 
-void            tracker_run  (Tracker *tracker,
-                              CvRect   closer_tracker_with_a_detected_obj);
+void            tracker_run     (Tracker    *tracker,
+                                Tracker     *closer_tracker_with_a_detected_obj,
+                                CvArr       *detection_confidence);
+
+
+CvPoint         rect_centroid   (CvRect *rect);
+static gfloat   euclidian_distance (CvPoint p1, CvPoint p2);
 
 #endif // __GST_TRACKER_H__
