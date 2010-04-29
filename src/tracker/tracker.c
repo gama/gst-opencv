@@ -63,7 +63,7 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
             gint num_particles, IplImage *image,
             gfloat beta, gfloat gama, gfloat mi)
 {
-    Tracker        *tracker;       
+    Tracker        *tracker;
     CvRNG           rng_state;
     CvMat          *lowerBound;
     CvMat          *upperBound;

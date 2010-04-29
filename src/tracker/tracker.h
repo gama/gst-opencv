@@ -70,8 +70,8 @@ Tracker*        tracker_new     (const      CvRect *region,
                                 gint        measurement_vec_dim,
                                 gint        num_particles,
                                 IplImage    *image,
-                                gfloat      beta, 
-                                gfloat      gama, 
+                                gfloat      beta,
+                                gfloat      gama,
                                 gfloat      mi);
 
 void            tracker_free    (Tracker    *tracker);
