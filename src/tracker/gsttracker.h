@@ -111,14 +111,19 @@ struct _GstTracker
     IplImage* cvMotion;
 
     // breitenstein tracking algorithm
-    GSList *trackers;
-    GSList *unassociated_objects_last_frame;
+    GSList          *trackers;
+    GSList          *unassociated_objects_last_frame;
+    GSList          *detected_objects;
+    CvArr           *detection_confidence;
 
-    GArray      *detections;
-    CvMat        confidence_density;
+    GArray          *detections;
+    CvMat           confidence_density;
 
-    GstClockTime detect_timestamp;
-    GstClockTime confidence_density_timestamp;
+    GstClockTime    detected_objects_timestamp;
+    GstClockTime    detection_confidence_timestamp;
+
+    GstClockTime    detect_timestamp;
+    GstClockTime    confidence_density_timestamp;
 };
 
 struct _GstTrackerClass
