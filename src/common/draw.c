@@ -211,16 +211,15 @@ void
 draw_mesh(IplImage *dst, const CvPoint q1, const CvPoint q2, const CvPoint q3,
         const CvPoint q4, const int w_lines, const int h_lines, CvScalar color)
 {
+    int i;
+    float m, c;
+    CvPoint p_0, p_1;
 
     // Contours
     cvLine(dst, q1, q2, color, 1, 8, 0);
     cvLine(dst, q2, q3, color, 1, 8, 0);
     cvLine(dst, q3, q4, color, 1, 8, 0);
     cvLine(dst, q4, q1, color, 1, 8, 0);
-
-    int i;
-    float m, c;
-    CvPoint p_0, p_1;
 
     // Horizontal
     for (i = 0; i < h_lines; ++i) {
