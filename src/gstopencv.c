@@ -30,6 +30,7 @@
 #include "gstfacemetrix.h"
 #include "gsthaaradjust.h"
 #include "gsthaardetect.h"
+#include "gsthogdetect.h"
 #include "gsthomography.h"
 #include "gstmotiontemplate.h"
 #include "gstlkopticalflow.h"
@@ -66,6 +67,9 @@ plugin_init(GstPlugin *plugin)
     return FALSE;
 
   if (!gst_haar_detect_plugin_init (plugin))
+    return FALSE;
+
+  if (!gst_hog_detect_plugin_init (plugin))
     return FALSE;
 
   if (!gst_homography_plugin_init (plugin))

@@ -160,6 +160,7 @@ AC_OUTPUT([
     src/facemetrix/Makefile
     src/haaradjust/Makefile
     src/haardetect/Makefile
+    src/hogdetect/Makefile
     src/homography/Makefile
     src/interpreterinteraction/Makefile
     src/lkopticalflow/Makefile

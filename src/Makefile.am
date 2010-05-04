@@ -9,6 +9,7 @@ SUBDIRS =																			\
 	facemetrix																		\
 	haaradjust																		\
 	haardetect																		\
+	hogdetect																		\
 	homography																		\
 	interpreterinteraction															\
 	lkopticalflow																	\
@@ -41,6 +42,7 @@ libgstopencv_la_CFLAGS =															\
 	-I${top_srcdir}/src/facemetrix													\
 	-I${top_srcdir}/src/haaradjust													\
 	-I${top_srcdir}/src/haardetect													\
+	-I${top_srcdir}/src/hogdetect													\
 	-I${top_srcdir}/src/homography													\
 	-I${top_srcdir}/src/interpreterinteraction										\
 	-I${top_srcdir}/src/lkopticalflow												\
@@ -69,6 +71,7 @@ libgstopencv_la_LIBADD =															\
 	$(top_builddir)/src/facemetrix/libgstfacemetrix.la								\
 	$(top_builddir)/src/haaradjust/libgsthaaradjust.la								\
 	$(top_builddir)/src/haardetect/libgsthaardetect.la								\
+	$(top_builddir)/src/hogdetect/libgsthogdetect.la								\
 	$(top_builddir)/src/homography/libgsthomography.la								\
 	$(top_builddir)/src/interpreterinteraction/libgstinterpreterinteraction.la		\
 	$(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la						\
@@ -98,6 +101,7 @@ libgstopencv_la_DEPENDENCIES =														\
 	$(top_builddir)/src/facemetrix/libgstfacemetrix.la								\
 	$(top_builddir)/src/haaradjust/libgsthaaradjust.la								\
 	$(top_builddir)/src/haardetect/libgsthaardetect.la								\
+	$(top_builddir)/src/hogdetect/libgsthogdetect.la								\
 	$(top_builddir)/src/homography/libgsthomography.la								\
 	$(top_builddir)/src/interpreterinteraction/libgstinterpreterinteraction.la		\
 	$(top_builddir)/src/lkopticalflow/libgstlkopticalflow.la						\
