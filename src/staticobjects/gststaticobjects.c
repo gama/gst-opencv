@@ -121,8 +121,8 @@ gst_static_objects_finalize(GObject *obj)
 
     filter = GST_STATIC_OBJECTS(obj);
 
-    if (filter->image)        cvReleaseImage(&filter->image);
-    if (filter->objects_str)  g_free(filter->objects_str);
+    if (filter->image)       cvReleaseImage(&filter->image);
+    if (filter->objects_str) g_free(filter->objects_str);
 
     for (iter = filter->objects_list; iter != NULL; iter = iter->next)
         tracked_object_free(iter->data);
@@ -215,6 +215,7 @@ gst_static_objects_set_property(GObject *object, guint prop_id, const GValue *va
             filter->display = g_value_get_boolean(value);
             break;
         case PROP_OBJECTS:
+            if (filter->objects_str) g_free(filter->objects_str);
             filter->objects_str = g_value_dup_string(value);
             if (gst_static_objects_parse_objects_str(filter) == FALSE)
                 GST_WARNING_OBJECT(filter, "unable to parse objects string: \"%s\"", filter->objects_str);
@@ -238,7 +239,7 @@ gst_static_objects_get_property(GObject *object, guint prop_id, GValue *value, G
             g_value_set_boolean(value, filter->display);
             break;
         case PROP_OBJECTS:
-            g_value_take_string(value, filter->objects_str);
+            g_value_set_string(value, filter->objects_str);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);

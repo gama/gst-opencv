@@ -232,6 +232,7 @@ gst_homography_set_property(GObject *object, guint prop_id, const GValue *value,
             filter->display = g_value_get_boolean(value);
             break;
         case PROP_MATRIX:
+            if (filter->matrix_str) g_free(filter->matrix_str);
             filter->matrix_str = g_value_dup_string(value);
             if (gst_homography_parse_matrix_str(filter) == FALSE)
                 GST_WARNING_OBJECT(filter, "unable to parse matrix string: %s", filter->matrix_str);
@@ -255,7 +256,7 @@ gst_homography_get_property(GObject *object, guint prop_id, GValue *value, GPara
             g_value_set_boolean(value, filter->display);
             break;
         case PROP_MATRIX:
-            g_value_take_string(value, filter->matrix_str);
+            g_value_set_string(value, filter->matrix_str);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);

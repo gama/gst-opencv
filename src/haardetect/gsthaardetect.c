@@ -120,11 +120,12 @@ gst_haar_detect_finalize(GObject *obj)
 {
     GstHaarDetect *filter = GST_HAAR_DETECT(obj);
 
-    if (filter->image)   cvReleaseImage(&filter->image);
-    if (filter->gray)    cvReleaseImage(&filter->gray);
-    if (filter->storage) cvReleaseMemStorage(&filter->storage);
-    if (filter->cascade) cvReleaseHaarClassifierCascade(&filter->cascade);
-    if (filter->profile) g_free(filter->profile);
+    if (filter->image)       cvReleaseImage(&filter->image);
+    if (filter->gray)        cvReleaseImage(&filter->gray);
+    if (filter->storage)     cvReleaseMemStorage(&filter->storage);
+    if (filter->cascade)     cvReleaseHaarClassifierCascade(&filter->cascade);
+    if (filter->profile)     g_free(filter->profile);
+    if (filter->save_prefix) g_free(filter->save_prefix);
 
     G_OBJECT_CLASS (parent_class)->finalize(obj);
 }
@@ -214,9 +215,9 @@ gst_haar_detect_init(GstHaarDetect *filter, GstHaarDetectClass *gclass)
     filter->roi_only      = FALSE;
     filter->roi_timestamp = 0;
     filter->roi_array     = g_array_sized_new(FALSE, FALSE, sizeof(CvRect), 4);
-    filter->profile       = DEFAULT_PROFILE;
+    filter->profile       = g_strdup(DEFAULT_PROFILE);
     filter->save_images   = FALSE;
-    filter->save_prefix   = DEFAULT_SAVE_PREFIX;
+    filter->save_prefix   = g_strdup(DEFAULT_SAVE_PREFIX);
     filter->min_neighbors = DEFAULT_MIN_NEIGHBORS;
     filter->min_size      = DEFAULT_MIN_SIZE;
 
@@ -239,8 +240,9 @@ gst_haar_detect_set_property(GObject *object, guint prop_id, const GValue *value
             filter->roi_only = g_value_get_boolean(value);
             break;
         case PROP_PROFILE:
+            if (filter->profile) g_free(filter->profile);
             filter->profile = g_value_dup_string(value);
-            gst_haar_detect_load_profile (filter);
+            gst_haar_detect_load_profile(filter);
             break;
         case PROP_MIN_NEIGHBORS:
             filter->min_neighbors = g_value_get_uint(value);
@@ -252,6 +254,7 @@ gst_haar_detect_set_property(GObject *object, guint prop_id, const GValue *value
             filter->save_images = g_value_get_boolean(value);
             break;
         case PROP_SAVE_PREFIX:
+            if (filter->save_prefix) g_free(filter->save_prefix);
             filter->save_prefix = g_value_dup_string(value);
             break;
         default:
@@ -276,7 +279,7 @@ gst_haar_detect_get_property(GObject *object, guint prop_id, GValue *value, GPar
             g_value_set_boolean(value, filter->roi_only);
             break;
         case PROP_PROFILE:
-            g_value_take_string(value, filter->profile);
+            g_value_set_string(value, filter->profile);
             break;
         case PROP_MIN_NEIGHBORS:
             g_value_set_uint(value, filter->min_neighbors);
@@ -288,7 +291,7 @@ gst_haar_detect_get_property(GObject *object, guint prop_id, GValue *value, GPar
             g_value_set_boolean(value, filter->save_images);
             break;
         case PROP_SAVE_PREFIX:
-            g_value_take_string(value, filter->save_prefix);
+            g_value_set_string(value, filter->save_prefix);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);

@@ -206,6 +206,8 @@ gst_facemetrix_init(GstFaceMetrix *filter, GstFaceMetrixClass *gclass)
     filter->verbose        = FALSE;
     filter->display        = FALSE;
     filter->unknown_faces  = FALSE;
+    filter->host           = g_strdup(DEFAULT_HOST);
+    filter->recognizer_id  = g_strdup(DEFAULT_RECOGNIZER_ID);
     filter->face_timestamp = 0;
     filter->face_array     = g_array_sized_new(FALSE, FALSE, sizeof(CvRect), 1);
 }
@@ -226,12 +228,14 @@ gst_facemetrix_set_property(GObject *object, guint prop_id, const GValue *value,
             filter->unknown_faces = g_value_get_boolean(value);
             break;
         case PROP_HOST:
+            if (filter->host) g_free(filter->host);
             filter->host = g_value_dup_string(value);
             break;
         case PROP_PORT:
             filter->port = g_value_get_uint(value);
             break;
         case PROP_RECOGNIZER_ID:
+            if (filter->recognizer_id) g_free(filter->recognizer_id);
             filter->recognizer_id = g_value_dup_string(value);
             break;
         default:

@@ -211,6 +211,7 @@ gst_haar_adjust_set_property(GObject *object, guint prop_id, const GValue *value
             filter->display = g_value_get_boolean(value);
             break;
         case PROP_OBJECT_TYPE:
+            if (filter->object_type) g_free(filter->object_type);
             filter->object_type = g_value_dup_string(value);
             break;
         case PROP_HEIGHT_ADJUSTMENT:
@@ -235,7 +236,7 @@ gst_haar_adjust_get_property(GObject *object, guint prop_id, GValue *value, GPar
             g_value_set_boolean(value, filter->display);
             break;
         case PROP_OBJECT_TYPE:
-            g_value_take_string(value, filter->object_type);
+            g_value_set_string(value, filter->object_type);
             break;
         case PROP_HEIGHT_ADJUSTMENT:
             g_value_set_float(value, filter->height_adjustment);

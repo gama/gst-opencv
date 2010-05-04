@@ -127,7 +127,12 @@ static void
 gst_objectsareainteraction_finalize(GObject *obj)
 {
     GstObjectsAreaInteraction *filter = GST_OBJECTSAREAINTERACTION(obj);
-    if (filter->image) cvReleaseImage(&filter->image);
+    if (filter->image)             cvReleaseImage(&filter->image);
+    if (filter->contours)          g_free(filter->contours);
+    if (filter->homography_matrix) g_free(filter->homography_matrix);
+    g_array_free(filter->contours_area_settled, TRUE);
+    g_array_free(filter->contours_area_in, TRUE);
+
     G_OBJECT_CLASS(parent_class)->finalize(obj);
 }
 
@@ -244,9 +249,11 @@ gst_objectsareainteraction_set_property(GObject *object, guint prop_id, const GV
             filter->display_object = g_value_get_boolean(value);
             break;
         case PROP_CONTOURS:
+            if (filter->contours) g_free(filter->contours);
             filter->contours = g_value_dup_string(value);
             break;
         case PROP_HOMOGRAPHY_MATRIX:
+            if (filter->homography_matrix) g_free(filter->homography_matrix);
             filter->homography_matrix = g_value_dup_string(value);
             break;
         default:
@@ -274,11 +281,10 @@ gst_objectsareainteraction_get_property(GObject *object, guint prop_id, GValue *
             g_value_set_boolean(value, filter->display_object);
             break;
         case PROP_CONTOURS:
-            g_value_take_string(value, filter->contours);
-            break;
+            g_value_set_string(value, filter->contours);
             break;
         case PROP_HOMOGRAPHY_MATRIX:
-            g_value_take_string(value, filter->homography_matrix);
+            g_value_set_string(value, filter->homography_matrix);
             break;
         default:
             G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
