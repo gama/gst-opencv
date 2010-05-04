@@ -55,7 +55,7 @@
  * |[
  * gst-launch-0.10 videotestsrc ! decodebin ! ffmpegcolorspace !
  *      bgfgcodebook mask=TRUE model-min=40 model-max=50 n-morphology-itr=3 !
- *      facedetect profile=/apps/opencv/opencv/data/haarcascades/haarcascade_upperbody.xml min-neighbors=5 !
+ *      haardetect profile=/apps/opencv/opencv/data/haarcascades/haarcascade_upperbody.xml min-neighbors=5 !
  *      haaradjust object-type=UPPERBODY verbose=TRUE display=TRUE !
  *      ffmpegcolorspace ! xvimagesink sync=false
  * ]|
@@ -297,13 +297,12 @@ gst_haar_adjust_chain(GstPad *pad, GstBuffer *buf)
             GstEvent     *event;
             GstMessage   *message;
             GstStructure *structure;
+            gint          complement_height_top_bg, complement_height_bottom_bg,
+                          complement_height_top_projected, complement_height_bottom_projected;
 
             rect = g_array_index(filter->rect_array, CvRect, i);
 
-            int complement_height_top_bg = -1;
-            int complement_height_bottom_bg = -1;
-            int complement_height_top_projected = -1;
-            int complement_height_bottom_projected = -1;
+            complement_height_top_bg = complement_height_bottom_bg = -1;
 
             // Calculation of the 'height' complement of projected value
             complement_height_bottom_projected = complement_height_top_projected = (rect.height * filter->height_adjustment) - rect.height;
@@ -404,7 +403,6 @@ gboolean events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
 
     structure = gst_event_get_structure(event);
 
-    //TODO rename structure "face"
     if ((structure != NULL) && (strcmp(gst_structure_get_name(structure), "haar-detect-roi") == 0)) {
         CvRect rect;
         GstClockTime timestamp;
