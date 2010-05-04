@@ -86,6 +86,7 @@
 
 #include "gstoptflowtracker.h"
 #include "tracked-object.h"
+#include "util.h"
 
 #include <gst/gst.h>
 #include <gst/gststructure.h>
@@ -168,7 +169,6 @@ static GstFlowReturn gst_optical_flow_tracker_chain           (GstPad *pad, GstB
 static IplImage*     gst_optical_flow_tracker_print_fg_mask   (GstOpticalFlowTracker *filter);
 static IplImage*     gst_optical_flow_tracker_print_haar_mask (GstOpticalFlowTracker *filter, CvRect *rect);
 static gboolean      events_cb                                (GstPad *pad, GstEvent *event, gpointer user_data);
-static CvRect        rect_intersection                        (const CvRect *a, const CvRect *b);
 static float         rect_area_overlap_perc                   (const CvRect *a, const CvRect *b);
 
 // gobject vmethod implementations
@@ -800,15 +800,6 @@ gst_optical_flow_tracker_print_haar_mask(GstOpticalFlowTracker *filter, CvRect *
                 cvPoint(r->x + r->width, r->y + r->height),
                 cvScalarAll(255), CV_FILLED, 8, 0);
     return mask;
-}
-
-static CvRect
-rect_intersection(const CvRect *a, const CvRect *b)
-{
-    CvRect r = cvRect(MAX(a->x, b->x), MAX(a->y, b->y), 0, 0);
-    r.width  = MIN(a->x + a->width,  b->x + b->width)  - r.x;
-    r.height = MIN(a->y + a->height, b->y + b->height) - r.y;
-    return r;
 }
 
 static float

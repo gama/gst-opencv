@@ -65,6 +65,7 @@
 
 #include "gsttracker.h"
 #include "identifier.h"
+#include "util.h"
 
 #include <gst/gst.h>
 #include <identifier_motion.h>

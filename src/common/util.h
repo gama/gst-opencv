@@ -1,9 +1,7 @@
 /*
- * GStreamer
- * Copyright (C) 2005 Thomas Vander Stichele <thomas@apestaart.org>
- * Copyright (C) 2005 Ronald S. Bultje <rbultje@ronald.bitfreak.net>
- * Copyright (C) 2008 Michael Sheldon <mike@mikeasoft.com>
- * Copyright (C) 2010 Erickson Rangel do Nascimento <erickson@vettalabs.com>
+ * Copyright (C) 2010 Gustavo Machado C. Gama <gama@vettalabs.com>
+ * Copyright (C) 2010 Erickson Nascimento <erickson@vettalabs.com>
+ * Copyright (C) 2010 Lucas Amorim <lucas@vettalabs.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -44,40 +42,21 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __TRACKER_H__
-#define __TRACKER_H__
+#ifndef __GST_OPENCV_COMMON_UTIL_H__
+#define __GST_OPENCV_COMMON_UTIL_H__
 
-#include <gst/gst.h>
 #include <cv.h>
-#include <cvaux.h>
+#include <glib.h>
 
-typedef struct _Tracker Tracker;
+gfloat   euclidian_distance (CvPoint p1,
+                             CvPoint p2);
 
-struct _Tracker
-{
-    guint          *id;
-    CvConDensation *filter;
-    guint           num_particles;
-    gfloat          mi;
-    gfloat          gama;
-    gfloat          beta;
-    CvRect          *detected_object;
-    CvPoint         centroid;
-};
+CvPoint  rect_centroid      (CvRect *rect);
 
-Tracker*        tracker_new  (const CvRect *region,
-                              gint          state_vec_dim,
-                              gint          measurement_vec_dim,
-                              gint          num_particles,
-                              IplImage     *image,
-                              gfloat        beta,
-                              gfloat        gama,
-                              gfloat        mi);
+CvRect   rect_intersection  (const CvRect *r1,
+                             const CvRect *r2);
 
-void            tracker_free (Tracker *tracker);
+gboolean rect_equal         (const CvRect *r1,
+                             const CvRect *r2);
 
-void            tracker_run  (Tracker *tracker,
-                              Tracker *closer_tracker_with_a_detected_obj,
-                              CvArr   *detection_confidence);
-
-#endif // __GST_TRACKER_H__
+#endif // __GST_OPENCV_COMMON_UTIL_H__

@@ -9,6 +9,7 @@ libgstcommon_la_SOURCES =								\
 	identifier_motion.c									\
 	surf.c          									\
 	tracked-object.c									\
+	util.c												\
 	$(NULL)
 
 # flags used to compile this plugin
@@ -34,4 +35,5 @@ noinst_HEADERS = 										\
 	identifier_motion.h									\
 	surf.h                                              \
 	tracked-object.h									\
+	util.h												\
 	$(NULL)

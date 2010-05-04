@@ -49,6 +49,7 @@
 #endif
 
 #include "tracker.h"
+#include "util.h"
 
 #include <cv.h>
 #include <math.h>
@@ -221,14 +222,6 @@ tracker_resample(Tracker *tracker, CvArr *detection_confidence, gfloat ctr, gflo
 
 
 // utility functions
-
-// FIXME
-CvPoint
-rect_centroid(CvRect *rect)
-{
-    return cvPoint(rect->x+rect->width/2, rect->y+rect->height/2);
-}
-
 static gboolean
 rect_is_null(CvRect rect)
 {
@@ -240,12 +233,6 @@ gaussian_function(gfloat x, gfloat mean, gfloat variance)
 {
     // variance = sigma^2
     return ((1 / sqrt(2 * M_PI * variance)) * exp(-((x - mean) * (x - mean))/(2 * variance)));
-}
-
-static gfloat
-euclidian_distance(CvPoint p1, CvPoint p2)
-{
-    return sqrt((p2.x-p1.x) * (p2.x - p1.x) + (p2.y - p1.y) * (p2.y - p1.y));
 }
 
 static gfloat
