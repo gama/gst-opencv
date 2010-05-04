@@ -232,9 +232,7 @@ rect_centroid(CvRect *rect)
 static gboolean
 rect_is_null(CvRect rect)
 {
-    if ((rect.x == 0) && (rect.y == 0) && (rect.width == 0) && (rect.height == 0))
-        return 1;
-    return 0;
+    return ((rect.x == 0) && (rect.y == 0) && (rect.width == 0) && (rect.height == 0));
 }
 
 static gfloat

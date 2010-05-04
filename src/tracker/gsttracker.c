@@ -64,12 +64,12 @@
 #endif
 
 #include "gsttracker.h"
+#include "identifier.h"
 
 #include <gst/gst.h>
 #include <identifier_motion.h>
 #include <condensation.h>
 
-#include "identifier.h"
 
 GST_DEBUG_CATEGORY_STATIC(gst_tracker_debug);
 #define GST_CAT_DEFAULT gst_tracker_debug
@@ -134,15 +134,13 @@ static GstStaticPadTemplate src_factory =
 
 GST_BOILERPLATE(GstTracker, gst_tracker, GstElement, GST_TYPE_ELEMENT);
 
-static void gst_tracker_set_property(GObject * object, guint prop_id,
-                                           const GValue * value, GParamSpec * pspec);
-static void gst_tracker_get_property(GObject * object, guint prop_id,
-                                           GValue * value, GParamSpec * pspec);
+// function prototypes
+static void          gst_tracker_set_property (GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec);
+static void          gst_tracker_get_property (GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+static gboolean      gst_tracker_set_caps     (GstPad * pad, GstCaps * caps);
+static GstFlowReturn gst_tracker_chain        (GstPad * pad, GstBuffer * buf);
 
-static gboolean gst_tracker_set_caps(GstPad * pad, GstCaps * caps);
-static GstFlowReturn gst_tracker_chain(GstPad * pad, GstBuffer * buf);
-
-/* Clean up */
+// clean up
 static void
 gst_tracker_finalize(GObject * obj)
 {

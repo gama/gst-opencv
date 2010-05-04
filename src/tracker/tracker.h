@@ -65,20 +65,20 @@ struct _Tracker
     CvPoint         centroid;
 };
 
-Tracker*        tracker_new     (const      CvRect *region,
-                                gint        state_vec_dim,
-                                gint        measurement_vec_dim,
-                                gint        num_particles,
-                                IplImage    *image,
-                                gfloat      beta,
-                                gfloat      gama,
-                                gfloat      mi);
+Tracker*        tracker_new  (const CvRect *region,
+                              gint          state_vec_dim,
+                              gint          measurement_vec_dim,
+                              gint          num_particles,
+                              IplImage     *image,
+                              gfloat        beta,
+                              gfloat        gama,
+                              gfloat        mi);
 
-void            tracker_free    (Tracker    *tracker);
+void            tracker_free (Tracker *tracker);
 
-void            tracker_run     (Tracker    *tracker,
-                                Tracker     *closer_tracker_with_a_detected_obj,
-                                CvArr       *detection_confidence);
+void            tracker_run  (Tracker *tracker,
+                              Tracker *closer_tracker_with_a_detected_obj,
+                              CvArr   *detection_confidence);
 
 
 CvPoint         rect_centroid   (CvRect *rect);
