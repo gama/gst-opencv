@@ -140,6 +140,7 @@ static void          gst_tracker_set_property (GObject *object, guint prop_id, c
 static void          gst_tracker_get_property (GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 static gboolean      gst_tracker_set_caps     (GstPad * pad, GstCaps * caps);
 static GstFlowReturn gst_tracker_chain        (GstPad * pad, GstBuffer * buf);
+static gboolean      gst_tracker_events_cb    (GstPad *pad, GstEvent *event, gpointer user_data);
 
 // clean up
 static void
@@ -428,6 +429,10 @@ gst_tracker_set_caps(GstPad * pad, GstCaps * caps)
     filter->initialized   = FALSE;
 
     filter->ConDens = initCondensation(filter->state_dim, filter->measurement_dim, filter->sample_size, filter->width_image, filter->height_image);
+
+    // add event probe to capture detection rectangles and confidence density
+    // sent by the upstream hog detect element
+    gst_pad_add_event_probe(filter->sinkpad, (GCallback) gst_tracker_events_cb, filter);
 
     otherpad = (pad == filter->srcpad) ? filter->sinkpad : filter->srcpad;
     gst_object_unref(filter);
@@ -820,6 +825,64 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     CV_SWAP(filter->points[0], filter->points[1], swap_points);
     gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
     return gst_pad_push(filter->srcpad, buf);
+}
+
+// callbacks
+static
+gboolean gst_tracker_events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
+{
+    GstTracker         *filter;
+    const GstStructure *structure;
+
+    filter = GST_TRACKER(user_data);
+
+    // sanity checks
+    g_return_val_if_fail(pad    != NULL, FALSE);
+    g_return_val_if_fail(event  != NULL, FALSE);
+    g_return_val_if_fail(filter != NULL, FALSE);
+
+    structure = gst_event_get_structure(event);
+    if (structure != NULL)
+        return TRUE;
+
+    if (strcmp(gst_structure_get_name(structure), "hog-confidence-density") == 0) {
+        CvMat       *confidence_density;
+        GstClockTime timestamp;
+
+        gst_structure_get((GstStructure*) structure,
+                          "matrix",    G_TYPE_POINTER, &confidence_density,
+                          "timestamp", G_TYPE_UINT64,  &timestamp, NULL);
+
+        if (timestamp > filter->confidence_density_timestamp) {
+            filter->confidence_density_timestamp = timestamp;
+            cvInitMatHeader(&filter->confidence_density, confidence_density->rows, confidence_density->cols,
+                            confidence_density->type, confidence_density->data.ptr, confidence_density->step);
+            // increment ref. counter so that the data ptr won't be deallocated
+            // once the upstream element releases the matrix header
+            cvIncRefData(&filter->confidence_density);
+        }
+    }
+
+    if (strcmp(gst_structure_get_name(structure), "hog-detect-roi") == 0) {
+        CvRect       rect;
+        GstClockTime timestamp;
+
+        gst_structure_get((GstStructure*) structure,
+                          "x",         G_TYPE_UINT,   &rect.x,
+                          "y",         G_TYPE_UINT,   &rect.y,
+                          "width",     G_TYPE_UINT,   &rect.width,
+                          "height",    G_TYPE_UINT,   &rect.height,
+                          "timestamp", G_TYPE_UINT64, &timestamp, NULL);
+
+        if (timestamp > filter->detect_timestamp) {
+            filter->detect_timestamp = timestamp;
+            g_array_free(filter->detections, TRUE);
+            filter->detections = g_array_sized_new(FALSE, FALSE, sizeof(CvRect), 1);
+        }
+        g_array_append_val(filter->detections, rect);
+    }
+
+    return TRUE;
 }
 
 /* entry point to initialize the plug-in

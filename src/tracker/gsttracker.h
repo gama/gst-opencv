@@ -113,6 +113,12 @@ struct _GstTracker
     // breitenstein tracking algorithm
     GSList *trackers;
     GSList *unassociated_objects_last_frame;
+
+    GArray      *detections;
+    CvMat        confidence_density;
+
+    GstClockTime detect_timestamp;
+    GstClockTime confidence_density_timestamp;
 };
 
 struct _GstTrackerClass
