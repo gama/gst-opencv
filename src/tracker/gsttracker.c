@@ -296,6 +296,10 @@ gst_tracker_init(GstTracker * filter, GstTrackerClass * gclass)
     filter->backgroundModel->cbBounds[0]    = DEFAULT_BGMODEL_CBBOUNDS_0;
     filter->backgroundModel->cbBounds[1]    = DEFAULT_BGMODEL_CBBOUNDS_1;
     filter->backgroundModel->cbBounds[2]    = DEFAULT_BGMODEL_CBBOUNDS_2;
+
+    filter->detect_timestamp = 0;
+    filter->confidence_density_timestamp = 0;
+
 }
 
 static void
@@ -440,120 +444,62 @@ gst_tracker_set_caps(GstPad * pad, GstCaps * caps)
     return gst_pad_set_caps(otherpad, caps);
 }
 
-// FIXME
-static
-gboolean events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
-{
-    GstTracker          *filter;
-    const GstStructure  *structure;
-    GstClockTime        timestamp;
-
-    filter = GST_TRACKER(GST_OBJECT_PARENT(pad));
-
-    // sanity checks
-    g_return_val_if_fail(pad    != NULL, FALSE);
-    g_return_val_if_fail(event  != NULL, FALSE);
-    g_return_val_if_fail(filter != NULL, FALSE);
-
-    structure = gst_event_get_structure(event);
-
-    if ((structure != NULL) && (strcmp(gst_structure_get_name(structure), "haar-detect-roi") == 0)) {
-        CvRect rect;
-        GstClockTime timestamp;
-
-        gst_structure_get((GstStructure*) structure,
-                          "x",         G_TYPE_UINT,   &rect.x,
-                          "y",         G_TYPE_UINT,   &rect.y,
-                          "width",     G_TYPE_UINT,   &rect.width,
-                          "height",    G_TYPE_UINT,   &rect.height,
-                          "timestamp", G_TYPE_UINT64, &timestamp, NULL);
-
-        if (timestamp > filter->detected_objects_timestamp) {
-            filter->detected_objects_timestamp = timestamp;
-            if (filter->detected_objects != NULL)
-                g_slist_free(filter->detected_objects);
-//            filter->rect_array = g_array_sized_new(FALSE, FALSE, sizeof(CvRect), 1);
-        }
-//        g_array_append_val(filter->rect_array, rect);
-        filter->detected_objects = g_slist_prepend(filter->detected_objects, &rect);        
-    }
-
-     if ((structure != NULL) && (strcmp(gst_structure_get_name(structure), "confidence-densityi") == 0)) {
-        //FIXME
-        if (timestamp > filter->detection_confidence_timestamp) {
-            filter->detection_confidence_timestamp = timestamp;
-            if (filter->detection_confidence != NULL)
-                g_array_free(filter->detection_confidence, TRUE);
-        }
-        //filter->detection_confidence = ...;
-
-         /*
-        CvRect rect;
-        GstClockTime timestamp;
-
-        gst_structure_get((GstStructure*) structure,
-                          "x",         G_TYPE_UINT,   &rect.x,
-                          "y",         G_TYPE_UINT,   &rect.y,
-                          "width",     G_TYPE_UINT,   &rect.width,
-                          "height",    G_TYPE_UINT,   &rect.height,
-                          "timestamp", G_TYPE_UINT64, &timestamp, NULL);
-
-        if (timestamp > filter->rect_bg_timestamp) {
-            filter->rect_bg_timestamp = timestamp;
-            g_array_free(filter->rect_bg_array, TRUE);
-            filter->rect_bg_array = g_array_sized_new(FALSE, FALSE, sizeof(CvRect), 1);
-        }
-        g_array_append_val(filter->rect_bg_array, rect);
-        */
-    }
-
-    return TRUE;
-}
-
-
-
-#if breitenstein_tracking_algorithm_implemented
-
 
 static GSList* has_intersection(CvRect *obj, GSList *objects);
-static void associate_detected_obj_to_tracker(GSList *detected_objects, GSList *trackers, GSList *unassociated_objects);
+static void associate_detected_obj_to_tracker(GSList *detected_objects, GSList *trackers, GSList **unassociated_objects);
 static Tracker* closer_tracker_with_a_detected_obj_to(Tracker* tracker, GSList* trackers);
+void print_tracker(Tracker *tracker, IplImage *image);
 
 
-typedef struct unassociated_obj_t {
+typedef struct {
     CvRect region;
     guint count;
 } unassociated_obj_t;
 
 
 // FIXME implement the greedy algorithm
-void associate_detected_obj_to_tracker(GSList *detected_objects, GSList *trackers, GSList *unassociated_objects)
+void associate_detected_obj_to_tracker(GSList *detected_objects, GSList *trackers, GSList **unassociated_objects)
 {
     Tracker *closer_tracker, *tracker;
     gfloat min_dist, dist;
     CvRect *detected_obj;
     GSList *it_detected_obj, *it_tracker;
+    gfloat dist_threshold;
 
     // FIXME: select other threshold
-    gfloat dist_threshold = 7.0;
+    dist_threshold = 7.0;
 
+    min_dist = G_MAXFLOAT;
+    closer_tracker = NULL;
+    *unassociated_objects = NULL;
+
+
+    GST_INFO("detected_objects: %d\n", g_slist_length(detected_objects));
     for (it_detected_obj = detected_objects; it_detected_obj; it_detected_obj = it_detected_obj->next) {
         detected_obj = (CvRect*)it_detected_obj->data;
 
-        closer_tracker->detected_object = NULL;
-        for (it_tracker = trackers; it_tracker; it_tracker = it_tracker->next) {
+        for (it_tracker = trackers; it_tracker; it_tracker = it_tracker->next) 
+        {
             tracker = (Tracker*)it_tracker->data;
-            dist = euclidian_distance(rect_centroid(detected_obj), tracker->centroid);
-            if (dist < min_dist)
+            if (tracker != NULL)
             {
-                min_dist = dist;
-                closer_tracker = tracker;
+                dist = euclidian_distance(rect_centroid(detected_obj), tracker->centroid);
+                if (dist < min_dist)
+                {
+                    min_dist = dist;
+                    closer_tracker = tracker;
+                }
             }
         }
-        if (min_dist <= dist_threshold)
+        if (min_dist <= dist_threshold && closer_tracker != NULL)
             closer_tracker->detected_object = detected_obj;
-        else
-            unassociated_objects = g_slist_prepend(unassociated_objects, detected_obj);
+        else if (detected_obj != NULL)
+        {
+            GST_INFO("adding CvRect(%d, %d, %d, %d) at unassociated_objects",
+                                detected_obj->x, detected_obj->y, detected_obj->width,
+                                detected_obj->height); *unassociated_objects =
+            g_slist_prepend(*unassociated_objects, detected_obj);
+        }
     }
 }
 
@@ -583,11 +529,12 @@ has_intersection(CvRect *obj, GSList *objects)
     min_dist = G_MAXFLOAT;
     center = rect_centroid(obj);
 
+    GST_INFO("num of objects: %d", g_slist_length(objects));
     for (it_obj = objects; it_obj; it_obj = it_obj->next) {
 
         rect = ((unassociated_obj_t*)it_obj->data)->region;
 
-        left   = max(obj->x, rect.x + rect.width);
+        left   = max(obj->x, rect.x);
         top    = max(obj->y, rect.y);
         right  = min(obj->x + obj->width, rect.x + rect.width );
         bottom = min(obj->y + obj->height, rect.y + rect.height);
@@ -629,7 +576,16 @@ closer_tracker_with_a_detected_obj_to(Tracker* tracker, GSList* trackers)
     }
     return closer_tracker;
 }
-#endif
+
+void print_tracker(Tracker *tracker, IplImage *image)
+{
+    int i;
+
+    for (i = 0; i < tracker->filter->SamplesNum; i++) {
+        cvCircle(image, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]),
+                        3, CV_RGB(0, 0, 255), 3, 8, 0);
+    }
+}
 
 /* chain function
  * this function does the actual processing
@@ -643,7 +599,6 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     float avg_x = 0.0;
 
 
-    #if breitenstein_tracking_algorithm_implemented
     GSList *unassociated_objects = NULL;
     unassociated_obj_t *unassociated_obj = NULL;
 
@@ -665,42 +620,40 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
 
     guint  num_particles = 100;
 
-
-    #endif
-
     filter = GST_TRACKER(GST_OBJECT_PARENT(pad));
     filter->image->imageData = (char *) GST_BUFFER_DATA(buf);
 
     cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
 
 
-    #if breitenstein_tracking_algorithm_implemented
-    if (filter->detected_objects_timestamp == GST_BUFFER_TIMESTAMP(buf) &&
-        filter->detection_confidence_timestamp == GST_BUFFER_TIMESTAMP(buf))
+    GST_INFO("trackers: %d\n", g_slist_length(filter->trackers));
+
+    if (filter->detect_timestamp == GST_BUFFER_TIMESTAMP(buf) && filter->confidence_density_timestamp == GST_BUFFER_TIMESTAMP(buf))
     {
 
-        // FIXME: implement pseudo-code below
-
+        GST_INFO("detected_objects: %d", g_slist_length(filter->detected_objects));
         // data association
-        associate_detected_obj_to_tracker(filter->detected_objects, filter->trackers, unassociated_objects);
+        associate_detected_obj_to_tracker(filter->detected_objects, filter->trackers, &unassociated_objects);
+        GST_INFO("unassociated_objects: %d", g_slist_length(unassociated_objects));
 
         // creating tracker for new detected object
         for (it_obj = unassociated_objects; it_obj; it_obj = it_obj->next) {
             intersection_last_frame = has_intersection((CvRect*)it_obj->data, filter->unassociated_objects_last_frame);
-            if (intersection_last_frame != NULL) {
+            if (intersection_last_frame != NULL) 
+            {
                 unassociated_obj = ((unassociated_obj_t*)intersection_last_frame);
                 unassociated_obj->count++;
+                GST_INFO("total of intersection: %d", unassociated_obj->count);
                 unassociated_obj->region = *((CvRect*)it_obj->data); // update the region
 
                 if (unassociated_obj->count >= num_subsequent_detections) {
-                    new_tracker = tracker_new( &unassociated_obj->region, 2, 2, num_particles, filter->image, beta, gama, mi );
+                    new_tracker = tracker_new( &unassociated_obj->region, 4, 4, num_particles, filter->image, beta, gama, mi );
                     filter->trackers = g_slist_prepend(filter->trackers, new_tracker);
 
                     filter->unassociated_objects_last_frame = g_slist_remove(filter->unassociated_objects_last_frame, intersection_last_frame);
                     g_free(unassociated_obj);
                 }
-            }
-            else {
+            } else {
                 unassociated_obj = g_new(unassociated_obj_t, 1);
                 unassociated_obj->region = *((CvRect*)it_obj->data);
                 unassociated_obj->count = 0;
@@ -710,17 +663,21 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
 
         // tracking
         for (it_tracker = filter->trackers; it_tracker; it_tracker = it_tracker->next) {
+            GST_INFO("running tracker.");
             tracker = (Tracker*)it_tracker->data;
 
             closer_tracker = closer_tracker_with_a_detected_obj_to( tracker, filter->trackers );
-            tracker_run(tracker, closer_tracker, filter->detection_confidence);
+            tracker_run(tracker, closer_tracker, &filter->confidence_density);
+            //FIXME
+            //print_tracker(tracker, filter->image);
         }
 
+        //TODO: review unassociated_objects list memory manage
         g_slist_free(unassociated_objects);
     }
-    #endif
 
 
+    #if 0
     // If use background, do trainning
     if(!filter->tracker_by_motion){
 
@@ -892,6 +849,8 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
         fflush(stdout);
     }
 
+    #endif
+
     filter->prev_avg_x = avg_x;
     CV_SWAP(filter->prev_grey, filter->grey, swap_temp);
     CV_SWAP(filter->prev_pyramid, filter->pyramid, swap_temp);
@@ -904,8 +863,8 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
 static
 gboolean gst_tracker_events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
 {
-    GstTracker         *filter;
-    const GstStructure *structure;
+    GstTracker          *filter;
+    const GstStructure  *structure;
 
     filter = GST_TRACKER(user_data);
 
@@ -915,7 +874,7 @@ gboolean gst_tracker_events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
     g_return_val_if_fail(filter != NULL, FALSE);
 
     structure = gst_event_get_structure(event);
-    if (structure != NULL)
+    if (structure == NULL)
         return TRUE;
 
     if (strcmp(gst_structure_get_name(structure), "hog-confidence-density") == 0) {
@@ -937,22 +896,28 @@ gboolean gst_tracker_events_cb(GstPad *pad, GstEvent *event, gpointer user_data)
     }
 
     if (strcmp(gst_structure_get_name(structure), "hog-detect-roi") == 0) {
-        CvRect       rect;
+        CvRect       *detect_rect;
         GstClockTime timestamp;
+        GSList       *it_list;
 
+
+        detect_rect = g_new(CvRect,1);
         gst_structure_get((GstStructure*) structure,
-                          "x",         G_TYPE_UINT,   &rect.x,
-                          "y",         G_TYPE_UINT,   &rect.y,
-                          "width",     G_TYPE_UINT,   &rect.width,
-                          "height",    G_TYPE_UINT,   &rect.height,
+                          "x",         G_TYPE_UINT,   &detect_rect->x,
+                          "y",         G_TYPE_UINT,   &detect_rect->y,
+                          "width",     G_TYPE_UINT,   &detect_rect->width,
+                          "height",    G_TYPE_UINT,   &detect_rect->height,
                           "timestamp", G_TYPE_UINT64, &timestamp, NULL);
 
         if (timestamp > filter->detect_timestamp) {
             filter->detect_timestamp = timestamp;
-            g_array_free(filter->detections, TRUE);
-            filter->detections = g_array_sized_new(FALSE, FALSE, sizeof(CvRect), 1);
+            for(it_list = filter->detected_objects; it_list; it_list = it_list->next)
+                g_free(it_list->data);
+
+            g_slist_free(filter->detected_objects);
+            filter->detected_objects = NULL;
         }
-        g_array_append_val(filter->detections, rect);
+        filter->detected_objects = g_slist_prepend(filter->detected_objects, detect_rect);
     }
 
     return TRUE;

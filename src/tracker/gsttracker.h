@@ -114,13 +114,8 @@ struct _GstTracker
     GSList          *trackers;
     GSList          *unassociated_objects_last_frame;
     GSList          *detected_objects;
-    CvArr           *detection_confidence;
 
-    GArray          *detections;
     CvMat           confidence_density;
-
-    GstClockTime    detected_objects_timestamp;
-    GstClockTime    detection_confidence_timestamp;
 
     GstClockTime    detect_timestamp;
     GstClockTime    confidence_density_timestamp;

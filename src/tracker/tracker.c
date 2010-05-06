@@ -55,9 +55,10 @@
 #include <math.h>
 
 // private function prototypes
-static void     tracker_resample   (Tracker *tracker, CvArr *detection_confidence, gfloat ctr, gfloat po);
+static void     tracker_resample   (Tracker *tracker, CvMat *confidence_density, gfloat ctr, gfloat po);
 static gfloat   gaussian_function  (gfloat x, gfloat mean, gfloat variance);
-static gfloat   online_classifier  (CvRect *detected_obj);
+static gfloat   online_classify    (CvRect *detected_obj);
+static void     online_train       (CvRect *detected_obj);
 
 Tracker*
 tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
@@ -78,6 +79,12 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
     tracker->beta = beta;
     tracker->gama = gama;
     tracker->mi = mi;
+
+    tracker->detected_object = g_new(CvRect,1);
+    tracker->detected_object->x = region->x;
+    tracker->detected_object->y = region->x;
+    tracker->detected_object->width = region->width;
+    tracker->detected_object->height = region->height;
 
     lowerBound = cvCreateMat(state_vec_dim, 1, CV_32F);
     upperBound = cvCreateMat(state_vec_dim, 1, CV_32F);
@@ -119,19 +126,25 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
     horizontal_sigma = 3 * (region->width  - region->x) / 2; // 3*sigma ~ 99->7% of particles inside of rectangle
     vertical_sigma   = 3 * (region->height - region->y) / 2;
 
+    //TODO: review this distribution
+    /*
     cvRandArr(&rng_state, particle_positions, CV_RAND_NORMAL,
-              cvScalar(region->x, region->y, 0, 0),
+              cvScalar(region->x+region->width/2, region->y+region->height/2, 0, 0),
               cvScalar(3 * horizontal_sigma, 3 * vertical_sigma, 0, 0));
-
+    */
     for (i = 0; i < num_particles; ++i) {
-        CvPoint *pt = (CvPoint*) cvPtr1D(particle_positions, i, 0);
-        tracker->filter->flSamples[i][0] = pt->x; // 0 -> x coord
-        tracker->filter->flSamples[i][1] = pt->y; // 1 -> y coord
+    //    CvPoint *pt = (CvPoint*) cvPtr1D(particle_positions, i, 0);
+    //FIXME: change this uniforme distribution to the pdf above
+        tracker->filter->flSamples[i][0] = (cvRandInt(&rng_state) + tracker->detected_object->x) %
+                                            (tracker->detected_object->x+tracker->detected_object->width);  //0 -> x coord
+        tracker->filter->flSamples[i][1] =  (cvRandInt(&rng_state) + tracker->detected_object->y) %
+                                            (tracker->detected_object->y+tracker->detected_object->height);  //1 -> y coord
     }
 
     cvReleaseMat(&particle_positions);
     cvReleaseMat(&lowerBound);
     cvReleaseMat(&upperBound);
+
 
     return tracker;
 }
@@ -145,7 +158,7 @@ tracker_free(Tracker *tracker)
 
 // FIXME: define mean and variance
 void
-tracker_run(Tracker *tracker, Tracker *closer_tracker_with_a_detected_obj, CvArr *detection_confidence)
+tracker_run(Tracker *tracker, Tracker *closer_tracker_with_a_detected_obj, CvMat *confidence_density)
 {
     gfloat ctr, po, mean, variance;
 
@@ -155,7 +168,7 @@ tracker_run(Tracker *tracker, Tracker *closer_tracker_with_a_detected_obj, CvArr
     // FIXME: initialize mean and/or variance
     mean = variance = 0.0f;
 
-    ctr  = online_classifier(tracker->detected_object);
+    ctr  = online_classify(tracker->detected_object);
 
     // reliability of the detector confidence density
     if (tracker->detected_object != NULL) // if a detection was associated to the tracker
@@ -165,20 +178,21 @@ tracker_run(Tracker *tracker, Tracker *closer_tracker_with_a_detected_obj, CvArr
                                mean, variance);
     else po = 0.0f;
 
-    tracker_resample(tracker, detection_confidence, ctr, po);
+    tracker_resample(tracker, confidence_density, ctr, po);
+    cvConDensUpdateByTime(tracker->filter);
 }
 
 // private methods
 
 // FIXME: define mean and variance
 static void
-tracker_resample(Tracker *tracker, CvArr *detection_confidence, gfloat ctr, gfloat po)
+tracker_resample(Tracker *tracker, CvMat *confidence_density, gfloat ctr, gfloat po)
 {
     CvPoint particle_pos;
     gfloat  mean, variance;
     gfloat  likelihood, has_detected_obj;
     gint    i;
-    double  detection_confidence_term;
+    double  confidence_density_term;
     gfloat  dist;
     CvPoint top_left, bottom_right;
 
@@ -209,9 +223,11 @@ tracker_resample(Tracker *tracker, CvArr *detection_confidence, gfloat ctr, gflo
         dist = euclidian_distance(particle_pos, rect_centroid(tracker->detected_object));
         likelihood   = gaussian_function( dist, mean, variance);
 
-        detection_confidence_term = cvGetReal2D( detection_confidence, particle_pos.y, particle_pos.x );
+//  FIXME: get confidence term from matrix
+//        confidence_density_term = cvGetReal2D( confidence_density, particle_pos.y, particle_pos.x );
+        confidence_density_term = 1.0;
         tracker->filter->flConfidence[i] = tracker->beta * has_detected_obj*likelihood +
-                                           tracker->gama * po * detection_confidence_term +
+                                           tracker->gama * po * confidence_density_term +
                                            tracker->mi   * ctr;
 
     }
@@ -236,8 +252,14 @@ gaussian_function(gfloat x, gfloat mean, gfloat variance)
 }
 
 static gfloat
-online_classifier(CvRect *detected_obj)
+online_classify(CvRect *detected_obj)
 {
     // FIXME
     return 0.0f;
+}
+
+static void
+online_train(CvRect *detected_obj)
+{
+    return;
 }

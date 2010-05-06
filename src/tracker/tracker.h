@@ -78,6 +78,8 @@ void            tracker_free (Tracker *tracker);
 
 void            tracker_run  (Tracker *tracker,
                               Tracker *closer_tracker_with_a_detected_obj,
-                              CvArr   *detection_confidence);
+                              CvMat   *confidence_density);
+
+CvPoint         rect_centroid(CvRect *rect);
 
 #endif // __GST_TRACKER_H__
