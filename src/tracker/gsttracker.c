@@ -577,13 +577,60 @@ closer_tracker_with_a_detected_obj_to(Tracker* tracker, GSList* trackers)
     return closer_tracker;
 }
 
+void 
+distribution_test(CvRect rect, IplImage *image)
+{
+    int             i, pointCount;
+    float           value_x, value_y;
+    CvRNG           rng_state;
+    CvPoint         p;
+    gfloat          horizontal_sigma, vertical_sigma;
+    float           center_x,center_y;
+    
+    pointCount = 100;
+
+    rng_state = cvRNG(0xffffffff);
+    cvRectangle(    image, 
+                    cvPoint(rect.x, rect.y), 
+                    cvPoint(rect.x+ rect.width, 
+                            rect.y+ rect.height), 
+                    CV_RGB(255, 255,0), 1, 8, 0);
+
+    center_x = (float)(rect.width)/2.0 + rect.x;
+    center_y = (float)(rect.height)/2.0 + rect.y;
+
+    horizontal_sigma = rect.width/2.0 / 3.0; 
+    vertical_sigma   = rect.height/2.0 / 3.0;
+
+    CvMat* locations = cvCreateMat(pointCount, 1, CV_32SC2);
+
+    #if 0
+    cvRandArr(&rng_state, locations, CV_RAND_UNI, cvScalar(rect.x,rect.y,0,0),
+               cvScalar(rect.x+rect.width, rect.y+rect.height,0,0));
+
+    #else
+    cvRandArr(&rng_state, locations, CV_RAND_NORMAL,
+               cvScalar(center_x, center_y, 0, 0), // average intensity
+               cvScalar(horizontal_sigma, 
+                        vertical_sigma, 0, 0) // deviation of the intensity
+              );
+    #endif
+
+    for (i = 0; i < pointCount; ++i) {
+        p = *(CvPoint*)cvPtr1D(locations, i, 0);
+        cvCircle(image, p, 3, CV_RGB(0, 255,0), 1, 8, 0);
+    }   
+
+    cvReleaseMat(&locations);
+}
+
 void print_tracker(Tracker *tracker, IplImage *image)
 {
     int i;
 
     for (i = 0; i < tracker->filter->SamplesNum; i++) {
         cvCircle(image, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]),
-                        3, CV_RGB(0, 0, 255), 3, 8, 0);
+                        3, CV_RGB(0, 0, 255), 1, 8, 0);
     }
 }
 
@@ -607,7 +654,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     GSList *intersection_last_frame = NULL;
 
     // select a better threshold
-    guint num_subsequent_detections = 5;
+    guint num_subsequent_detections = 2;
 
     Tracker *new_tracker = NULL;
     Tracker *tracker = NULL;
@@ -617,6 +664,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     gfloat beta = 0.1;
     gfloat gama = 0.2;
     gfloat mi   = 0.3;
+
 
     guint  num_particles = 100;
 
@@ -646,6 +694,8 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
                 GST_INFO("total of intersection: %d", unassociated_obj->count);
                 unassociated_obj->region = *((CvRect*)it_obj->data); // update the region
 
+                //distribution_test(unassociated_obj->region, filter->image);
+
                 if (unassociated_obj->count >= num_subsequent_detections) {
                     new_tracker = tracker_new( &unassociated_obj->region, 4, 4, num_particles, filter->image, beta, gama, mi );
                     filter->trackers = g_slist_prepend(filter->trackers, new_tracker);
@@ -669,187 +719,13 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
             closer_tracker = closer_tracker_with_a_detected_obj_to( tracker, filter->trackers );
             tracker_run(tracker, closer_tracker, &filter->confidence_density);
             //FIXME
-            //print_tracker(tracker, filter->image);
+            print_tracker(tracker, filter->image);
         }
 
         //TODO: review unassociated_objects list memory manage
         g_slist_free(unassociated_objects);
     }
 
-
-    #if 0
-    // If use background, do trainning
-    if(!filter->tracker_by_motion){
-
-        // Background update
-        if (filter->framesProcessed <= filter->nframesToLearnBG){
-            cvCvtColor( filter->image, filter->background, CV_BGR2YCrCb );
-            cvBGCodeBookUpdate( filter->backgroundModel, filter->background, cvRect(0,0,0,0), 0 );
-            filter->framesProcessed++;
-
-            gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
-            return gst_pad_push(filter->srcpad, buf);
-        }
-        else if (filter->framesProcessed == filter->nframesToLearnBG+1){
-            cvBGCodeBookClearStale( filter->backgroundModel, filter->backgroundModel->t/2, cvRect(0,0,0,0), 0 );
-        }
-    }
-
-
-    if (!filter->initialized || filter->count < filter->min_points) {
-
-        // automatic initialization
-        IplImage* eig       = cvCreateImage(cvGetSize(filter->grey), 32, 1);
-        IplImage* temp      = cvCreateImage(cvGetSize(filter->grey), 32, 1);
-
-        // Get ROI that defines the largest object found
-        CvRect rectRoi = (filter->tracker_by_motion)?
-            motion_detect(filter->image, filter->cvMotion):
-            segObjectBookBGDiff(filter->backgroundModel, filter->image, filter->background);
-
-        // If tiny or full size, do discard
-        if((rectRoi.height * rectRoi.width) < MIN_AREA_MOTION_CONSIDERED ||
-            (rectRoi.height * rectRoi.width) == (filter->image->height * filter->image->width))
-            rectRoi.height = rectRoi.width = 0;
-
-        if (rectRoi.width != 0 && rectRoi.height != 0){
-            double quality      = 0.01;
-            double min_distance = 10;
-            guint  i, win_size;
-
-            cvSetImageROI( filter->grey, rectRoi );
-
-            filter->count = filter->max_points;
-            filter->prev_avg_x = -1.0;
-
-            cvGoodFeaturesToTrack(filter->grey, eig, temp, filter->points[1], (int*) &(filter->count), quality,
-                                  min_distance, 0, 3, 0, 0.04);
-
-            // image size must to be greater than filter->win_size*2+5 see /home/erickson/Desktop/OpenCV-2.0.0/src/cv/cvcornersubpix.cpp, line 92
-            if ((guint) rectRoi.width <= (filter->win_size*2+5) || (guint) rectRoi.height <= (filter->win_size*2+5)) {
-                win_size = rectRoi.width < rectRoi.height ? rectRoi.width : rectRoi.height;
-                win_size = (win_size-5)/2;
-            } else
-                win_size = filter->win_size;
-
-            cvFindCornerSubPix(filter->grey, filter->points[1], filter->count, cvSize(win_size, win_size),
-                               cvSize(-1, -1), cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03));
-
-            // Displacement coordinates according ROI
-            for (i = 0; i < filter->count; i++) {
-                filter->points[1][i].x += rectRoi.x;
-                filter->points[1][i].y += rectRoi.y;
-            }
-
-            cvResetImageROI( filter->grey );
-
-            if (filter->verbose){
-                cvRectangle(filter->image,
-                    cvPoint(rectRoi.x, rectRoi.y),
-                    cvPoint(rectRoi.x+rectRoi.width, rectRoi.y+rectRoi.height),
-                    CV_RGB(255, 0, 255), 3, 0, 0 );
-                g_print(" reload...\n");
-            }
-
-            // Mark as initialized
-            filter->initialized = TRUE;
-        }
-
-        cvReleaseImage(&eig);
-        cvReleaseImage(&temp);
-
-    } else {
-        CvPoint vetCentroids[1];
-        CvRect  particlesBoundary, featuresBox;
-        double  measurement_x, measurement_y;
-        double  predicted_x, predicted_y;
-        guint   i, k;
-
-        cvCalcOpticalFlowPyrLK(filter->prev_grey, filter->grey, filter->prev_pyramid, filter->pyramid,
-                               filter->points[0], filter->points[1], filter->count, cvSize(filter->win_size, filter->win_size),
-                               3, filter->status, 0, cvTermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 20, 0.03),
-                               filter->flags);
-        filter->flags |= CV_LKFLOW_PYR_A_READY;
-
-        centroid(filter->points[1], filter->count, &measurement_x, &measurement_y);
-        if (filter->show_particles)
-            cvCircle( filter->image, cvPoint(measurement_x, measurement_y), 3, CV_RGB(255,0,0), -1, 8,0);
-
-        // Updated to be in line with faceMetrix updateCondensation
-        vetCentroids[0].x = measurement_x;
-        vetCentroids[0].y = measurement_y;
-        updateCondensation(filter->image, filter->ConDens, vetCentroids, 1, filter->show_particles);
-
-        predicted_x = filter->ConDens->State[0];
-        predicted_y = filter->ConDens->State[1];
-
-        if (filter->show_features)
-            cvCircle(filter->image, cvPoint(predicted_x, predicted_y), 3, CV_RGB(0,255,0), -1, 8, 0);
-
-        getParticlesBoundary(filter->ConDens, &particlesBoundary, filter->width_image, filter->height_image);
-
-        for (i = k = 0; i < filter->count; ++i) {
-            if (!filter->status[i])
-                continue;
-
-             if (filter->points[1][i].x < particlesBoundary.x || filter->points[1][i].x > particlesBoundary.x+particlesBoundary.width ||
-                 filter->points[1][i].y < particlesBoundary.y || filter->points[1][i].y > particlesBoundary.y+particlesBoundary.height )
-                    continue;
-
-            filter->points[1][k++] = filter->points[1][i];
-            avg_x += (float) filter->points[1][i].x;
-
-            if (filter->show_features)
-                cvCircle(filter->image, cvPointFrom32f(filter->points[1][i]), 3, CV_RGB(255, 255, 0), -1, 8, 0);
-        }
-
-        // Create features box
-        featuresBox = cvRect(0,0,0,0);
-        if (filter->count) {
-            CvPoint min, max;
-
-            min.x = filter->points[1][0].x;
-            min.y = filter->points[1][0].y;
-            max.x = filter->points[1][0].x;
-            max.y = filter->points[1][0].y;
-            for (i = 1; i < filter->count; ++i) {
-                if (min.x > filter->points[1][i].x) min.x = filter->points[1][i].x;
-                if (min.y > filter->points[1][i].y) min.y = filter->points[1][i].y;
-                if (max.x < filter->points[1][i].x) max.x = filter->points[1][i].x;
-                if (max.y < filter->points[1][i].y) max.y = filter->points[1][i].y;
-            }
-            if (min.x < 0) min.x = 0;
-            if (min.y < 0) min.y = 0;
-            if (max.x > filter->image->width) max.x = filter->image->width;
-            if (max.y > filter->image->height) max.y = filter->image->height;
-            featuresBox = cvRect(min.x, min.y, max.x-min.x, max.y-min.y);
-        }
-
-        // Draw feature box if required
-        if (filter->show_features_box && (featuresBox.height+featuresBox.width) != 0)
-            cvRectangle(filter->image,
-                        cvPoint(featuresBox.x, featuresBox.y),
-                        cvPoint(featuresBox.x+featuresBox.width, featuresBox.y+featuresBox.height),
-                        CV_RGB(0, 255, 255), 1, 0, 0 );
-
-        // Show border if required
-        if (filter->show_borders && (featuresBox.height+featuresBox.width) != 0) {
-            cvSetImageROI(filter->grey, featuresBox);
-            showBorder(filter->grey, filter->image, cvScalarAll(255), 30, 3, 1);
-            cvResetImageROI(filter->grey);
-        }
-
-        filter->count = k;
-        avg_x /= (float) filter->count;
-    }
-
-    if (filter->prev_avg_x >= 0) {
-        float diff = avg_x - filter->prev_avg_x;
-        if (filter->verbose) g_print("\r[%7.2f] %s", diff, diff > 2.0 ? "[    >>>]" : diff < -2.0 ? "[<<<    ]" : "[       ]");
-        fflush(stdout);
-    }
-
-    #endif
 
     filter->prev_avg_x = avg_x;
     CV_SWAP(filter->prev_grey, filter->grey, swap_temp);

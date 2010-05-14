@@ -71,7 +71,9 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
     CvMat          *upperBound;
     gint            i;
     CvMat          *particle_positions;
-    gfloat          horizontal_sigma, vertical_sigma;
+    CvPoint2D32f    standard_deviation;
+    CvPoint2D32f    mean;
+    CvPoint         pos;
 
     // allocate tracker struct and initialize condensation filter
     tracker         = g_new0(Tracker, 1);
@@ -81,10 +83,7 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
     tracker->mi = mi;
 
     tracker->detected_object = g_new(CvRect,1);
-    tracker->detected_object->x = region->x;
-    tracker->detected_object->y = region->x;
-    tracker->detected_object->width = region->width;
-    tracker->detected_object->height = region->height;
+    *tracker->detected_object = *region;
 
     lowerBound = cvCreateMat(state_vec_dim, 1, CV_32F);
     upperBound = cvCreateMat(state_vec_dim, 1, CV_32F);
@@ -119,26 +118,35 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
 
     rng_state = cvRNG(0xffffffff);
 
-    particle_positions = cvCreateMat(num_particles, 1, CV_32FC2);
+    particle_positions = cvCreateMat(num_particles, 1, CV_32SC2);
 
     // the initial particle positions are get from a normal distribution
-    // centered at the detection region
-    horizontal_sigma = 3 * (region->width  - region->x) / 2; // 3*sigma ~ 99->7% of particles inside of rectangle
-    vertical_sigma   = 3 * (region->height - region->y) / 2;
+    // with center at the detection region
+    mean = cvPoint2D32f((float)(tracker->detected_object->width)/2.0 + tracker->detected_object->x,
+                        (float)(tracker->detected_object->height)/2.0 + tracker->detected_object->y);
 
-    //TODO: review this distribution
-    /*
+    // 3*sigma ~ 99.7% of particles inside of rectangle
+    standard_deviation = cvPoint2D32f(  ((float)(tracker->detected_object->width)/2.0)/3.0,                                         
+                                        ((float)(tracker->detected_object->height)/2.0)/3.0); 
+    #if 1
+    // normal distribution
     cvRandArr(&rng_state, particle_positions, CV_RAND_NORMAL,
-              cvScalar(region->x+region->width/2, region->y+region->height/2, 0, 0),
-              cvScalar(3 * horizontal_sigma, 3 * vertical_sigma, 0, 0));
-    */
+               cvScalar(mean.x, mean.y, 0, 0), // average intensity
+               cvScalar(standard_deviation.x, standard_deviation.y, 0, 0) // deviation of the intensity
+              );
+    #else
+    // uniforme distribution
+    cvRandArr(&rng_state, particle_positions, CV_RAND_UNI, 
+                cvScalar(tracker->detected_object->x, tracker->detected_object->y, 0, 0), 
+                cvScalar(   tracker->detected_object->x + tracker->detected_object->width, 
+                            tracker->detected_object->y + tracker->detected_object->height, 0, 0));
+
+    #endif
+
     for (i = 0; i < num_particles; ++i) {
-    //    CvPoint *pt = (CvPoint*) cvPtr1D(particle_positions, i, 0);
-    //FIXME: change this uniforme distribution to the pdf above
-        tracker->filter->flSamples[i][0] = (cvRandInt(&rng_state) + tracker->detected_object->x) %
-                                            (tracker->detected_object->x+tracker->detected_object->width);  //0 -> x coord
-        tracker->filter->flSamples[i][1] =  (cvRandInt(&rng_state) + tracker->detected_object->y) %
-                                            (tracker->detected_object->y+tracker->detected_object->height);  //1 -> y coord
+        pos = *(CvPoint*)cvPtr1D(particle_positions, i, 0);
+        tracker->filter->flSamples[i][0] = pos.x;  //0 -> x coord
+        tracker->filter->flSamples[i][1] = pos.y; //1 -> y coord
     }
 
     cvReleaseMat(&particle_positions);
