@@ -11,6 +11,8 @@ noinst_LTLIBRARIES = libonlineboost.la
 # sources used to compile this directory
 libonlineboost_la_SOURCES =						\
 	BaseClassifier.cpp							\
+	Classifier.cpp                              \
+	ClassifierIntermediate.cpp					\
 	ClassifierThreshold.cpp						\
 	Detector.cpp								\
 	EstimatedGaussDistribution.cpp				\
@@ -44,6 +46,7 @@ libonlineboost_la_LDFLAGS =						\
 # headers we need but don't want installed
 noinst_HEADERS =								\
 	BaseClassifier.h							\
+	Classifier.h                                \
 	ClassifierThreshold.h						\
 	Detector.h									\
 	EstimatedGaussDistribution.h				\

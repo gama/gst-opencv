@@ -255,11 +255,13 @@ static gfloat
 online_classify(CvRect *detected_obj)
 {
     // FIXME
+    // classifier_intermediate_classify(IplImage *image, *detected_obj);
     return 0.0f;
 }
 
 static void
 online_train(CvRect *detected_obj)
 {
+    // classifier_intermediate_train(IplImage *image, *detected_obj);
     return;
 }

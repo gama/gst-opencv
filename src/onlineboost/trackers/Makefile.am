@@ -1,9 +1,28 @@
 NULL =
 
 noinst_PROGRAMS =						\
+	Classifier                          \
 	BoostingTracker						\
 	SemiBoostingTracker					\
 	BeyondSemiBoostingTracker			\
+	$(NULL)
+
+Classifier_SOURCES =                    \
+	ClassifierApplication.cpp			\
+	$(NULL)
+
+Classifier_CFLAGS =                     \
+	-I..								\
+	-I../imageio						\
+	$(OPENCV_CFLAGS)					\
+	$(NULL)
+
+Classifier_CXXFLAGS = $(Classifier_CFLAGS)
+
+Classifier_LDADD =                      \
+	../libonlineboost.la				\
+	../imageio/libonlineboostimageio.la	\
+	$(OPENCV_LIBS)						\
 	$(NULL)
 
 BoostingTracker_SOURCES =				\
