@@ -59,17 +59,18 @@ struct _Tracker
     CvConDensation *filter;
     guint           num_particles;
     gfloat          mi;
-    gfloat          gama;
+    gfloat          gamma;
     gfloat          beta;
     CvRect          *detected_object;
     CvPoint         centroid;
+    CvSize          image_size;
 };
 
 Tracker*        tracker_new  (const CvRect *region,
                               gint          state_vec_dim,
                               gint          measurement_vec_dim,
                               gint          num_particles,
-                              IplImage     *image,
+                              CvSize        image_size,
                               gfloat        beta,
                               gfloat        gama,
                               gfloat        mi);

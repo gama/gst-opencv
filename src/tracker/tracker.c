@@ -62,8 +62,8 @@ static void     online_train       (CvRect *detected_obj);
 
 Tracker*
 tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
-            gint num_particles, IplImage *image,
-            gfloat beta, gfloat gama, gfloat mi)
+            gint num_particles, CvSize image_size,
+            gfloat beta, gfloat gamma, gfloat mi)
 {
     Tracker        *tracker;
     CvRNG           rng_state;
@@ -79,8 +79,10 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
     tracker         = g_new0(Tracker, 1);
     tracker->filter = cvCreateConDensation(state_vec_dim, measurement_vec_dim, num_particles);
     tracker->beta = beta;
-    tracker->gama = gama;
+    tracker->gamma = gamma;
     tracker->mi = mi;
+
+    tracker->image_size = image_size;
 
     tracker->detected_object = g_new(CvRect,1);
     *tracker->detected_object = *region;
@@ -90,11 +92,11 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
 
     // coord x
     cvmSet(lowerBound, 0, 0, 0.0);
-    cvmSet(upperBound, 0, 0, image->width);
+    cvmSet(upperBound, 0, 0, image_size.width);
 
     // coord y
     cvmSet(lowerBound, 1, 0, 0.0);
-    cvmSet(upperBound, 1, 0, image->height);
+    cvmSet(upperBound, 1, 0, image_size.height);
 
     // x speed (dx/dt)
     cvmSet(lowerBound, 2, 0, 0.0);
@@ -173,17 +175,21 @@ tracker_run(Tracker *tracker, Tracker *closer_tracker_with_a_detected_obj, CvMat
     // sanity checks
     g_assert(tracker != NULL);
 
-    // FIXME: initialize mean and/or variance
-    mean = variance = 0.0f;
 
     ctr  = online_classify(tracker->detected_object);
 
     // reliability of the detector confidence density
     if (tracker->detected_object != NULL) // if a detection was associated to the tracker
         po = 1.0f;
-    else if (closer_tracker_with_a_detected_obj != NULL)
-        po = gaussian_function(euclidian_distance(tracker->centroid, closer_tracker_with_a_detected_obj->centroid),
+    else if (closer_tracker_with_a_detected_obj != NULL){
+        mean = 0.0f;
+        variance =sqrt( pow(closer_tracker_with_a_detected_obj->detected_object->width,2) + // diagonal
+                        pow(closer_tracker_with_a_detected_obj->detected_object->height,2));
+        po = gaussian_function(euclidian_distance(
+                                    tracker->centroid,
+                                    closer_tracker_with_a_detected_obj->centroid),
                                mean, variance);
+    }
     else po = 0.0f;
 
     tracker_resample(tracker, confidence_density, ctr, po);
@@ -192,7 +198,6 @@ tracker_run(Tracker *tracker, Tracker *closer_tracker_with_a_detected_obj, CvMat
 
 // private methods
 
-// FIXME: define mean and variance
 static void
 tracker_resample(Tracker *tracker, CvMat *confidence_density, gfloat ctr, gfloat po)
 {
@@ -215,28 +220,40 @@ tracker_resample(Tracker *tracker, CvMat *confidence_density, gfloat ctr, gfloat
 
     for (i = 0; i < tracker->filter->SamplesNum; i++) {
         particle_pos = cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]);
+        // FIXME: check if some particles can have negative positition?
+        if (particle_pos.x < tracker->image_size.width && particle_pos.y < tracker->image_size.height
+            && particle_pos.x >= 0 && particle_pos.y >= 0)
+        {
 
-        if (particle_pos.x < top_left.x)
-            top_left.x = particle_pos.x;
+            if (particle_pos.x < top_left.x)
+                top_left.x = particle_pos.x;
 
-        if (particle_pos.y < top_left.y)
-            top_left.y = particle_pos.y;
+            if (particle_pos.y < top_left.y)
+                top_left.y = particle_pos.y;
 
-        if (particle_pos.x > bottom_right.x)
-            bottom_right.x = particle_pos.x;
+            if (particle_pos.x > bottom_right.x)
+                bottom_right.x = particle_pos.x;
 
-        if (particle_pos.y > bottom_right.y)
-            bottom_right.y = particle_pos.y;
+            if (particle_pos.y > bottom_right.y)
+                bottom_right.y = particle_pos.y;
 
-        dist = euclidian_distance(particle_pos, rect_centroid(tracker->detected_object));
-        likelihood   = gaussian_function( dist, mean, variance);
+            dist = euclidian_distance(particle_pos, rect_centroid(tracker->detected_object));
 
-//  FIXME: get confidence term from matrix
-//        confidence_density_term = cvGetReal2D( confidence_density, particle_pos.y, particle_pos.x );
-        confidence_density_term = 1.0;
-        tracker->filter->flConfidence[i] = tracker->beta * has_detected_obj*likelihood +
-                                           tracker->gama * po * confidence_density_term +
-                                           tracker->mi   * ctr;
+            mean = 0;
+            variance =  sqrt(   pow(tracker->detected_object->width,2) + // diagonal
+                                pow(tracker->detected_object->height,2));
+
+            likelihood   = gaussian_function(dist, mean, variance);
+
+            if (confidence_density){
+                confidence_density_term = cvGetReal2D( confidence_density, particle_pos.y, particle_pos.x );
+            }
+            else confidence_density_term = 1.0;
+
+            tracker->filter->flConfidence[i] = tracker->beta * has_detected_obj * likelihood +
+                                               tracker->gamma * po * confidence_density_term +
+                                               tracker->mi   * ctr;
+        } else tracker->filter->flConfidence[i] = 0;
 
     }
 

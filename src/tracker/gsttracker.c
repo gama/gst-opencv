@@ -581,7 +581,6 @@ void
 distribution_test(CvRect rect, IplImage *image)
 {
     int             i, pointCount;
-    float           value_x, value_y;
     CvRNG           rng_state;
     CvPoint         p;
     gfloat          horizontal_sigma, vertical_sigma;
@@ -661,8 +660,8 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     Tracker *closer_tracker = NULL;
 
     // choose better values
-    gfloat beta = 0.1;
-    gfloat gama = 0.2;
+    gfloat beta = 0.7;
+    gfloat gamma = 0.2;
     gfloat mi   = 0.3;
 
 
@@ -697,7 +696,10 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
                 //distribution_test(unassociated_obj->region, filter->image);
 
                 if (unassociated_obj->count >= num_subsequent_detections) {
-                    new_tracker = tracker_new( &unassociated_obj->region, 4, 4, num_particles, filter->image, beta, gama, mi );
+                    new_tracker = tracker_new( &unassociated_obj->region, 4, 4,
+                                                num_particles,
+                                                cvSize(filter->image->width, filter->image->height),
+                                                beta, gamma, mi );
                     filter->trackers = g_slist_prepend(filter->trackers, new_tracker);
 
                     filter->unassociated_objects_last_frame = g_slist_remove(filter->unassociated_objects_last_frame, intersection_last_frame);
@@ -718,7 +720,6 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
 
             closer_tracker = closer_tracker_with_a_detected_obj_to( tracker, filter->trackers );
             tracker_run(tracker, closer_tracker, &filter->confidence_density);
-            //FIXME
             print_tracker(tracker, filter->image);
         }
 
