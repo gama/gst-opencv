@@ -227,6 +227,7 @@ void track3(ImageSource::InputDevice input, int numBaseClassifier, float overlap
         image = imageSequence->getIplImage();
 
 
+//cvWaitKey(0);
 
 
         printf ("init tracker...");
@@ -237,7 +238,6 @@ void track3(ImageSource::InputDevice input, int numBaseClassifier, float overlap
 	Size trackingRectSize;
 	trackingRectSize = trackingRect;
 	printf ("start tracking (stop by pressing any key)...\n\n");
-
 
 // Inicializa o detector
 Detector* detector;
@@ -290,20 +290,20 @@ float alpha, confidence, eval;
 
 alpha = tracker->getSumAlphaClassifier();
 confidence = detector->getConfidenceOfBestDetection() / alpha;
-eval = tracker->classify(curFrameRep, trackedPatch);
+eval = tracker->classify(image, trackedPatch);
 
 printf("alpha: %5.3f confidence: %5.3f evalOficial: %5.3f ", alpha, confidence, eval);
 
-
 int orig = trackedPatch.upper;
 trackedPatch.upper -= 5;
-
 for(int i = 0; i < 10; i++){
-    eval = tracker->classify(curFrameRep, trackedPatch);
+    eval = tracker->classify(image, trackedPatch);
     printf("%5.3f ", eval);
     trackedPatch.upper += 1;
+    imageSequence->paintRectangle (trackedPatch, Color (0,255,0), 1);
 }
 trackedPatch.upper = orig;
+
 printf("\n");
 
 

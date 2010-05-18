@@ -28,8 +28,5 @@ extern "C" float classifier_intermediate_classify(IplImage *image, CvRect rect) 
     trackedPatch.left = rect.x;
     trackedPatch.height = rect.height;
     trackedPatch.width = rect.width;
-    return 0.0f;
-
-    // FIXME
-    // return cls.classify(image, trackedPatch);
+    return cls.classify(image, trackedPatch);
 }

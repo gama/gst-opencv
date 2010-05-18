@@ -17,11 +17,11 @@ public:
 
     void init(IplImage *image, Rect trackedPatch);
     bool train(IplImage *image, Rect trackedPatch);
-    float classify(ImageRepresentation* image, Rect trackedPatch);
+    float classify(IplImage *image, Rect trackedPatch);
 
     Rect getTrackingROI(float searchFactor, Rect trackedPatch);
     float getConfidence();
-    void update_dataCh(IplImage *m_grayImage);
+    void update_dataCh(IplImage *m_grayImage, unsigned char **dataCh);
     float getSumAlphaClassifier();
     StrongClassifier* getClassifier();
 

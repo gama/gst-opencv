@@ -1,3 +1,4 @@
+#include <opencv/cxcore.h>
 #include "Classifier.h"
 
 Classifier::Classifier(void) {}
@@ -32,7 +33,7 @@ StrongClassifier* Classifier::getClassifier() {
     return classifier;
 }
 
-void Classifier::update_dataCh(IplImage *m_grayImage) {
+void Classifier::update_dataCh(IplImage *m_grayImage, unsigned char **dataCh) {
 
     IplImage * temp;
     temp = cvCreateImage(cvGetSize(m_grayImage), 8, 1);
@@ -42,11 +43,11 @@ void Classifier::update_dataCh(IplImage *m_grayImage) {
     int cols = temp->width;
     int iplCols = temp->widthStep;
 
-    this->dataCh = new unsigned char[rows * cols];
+    *dataCh = new unsigned char[rows * cols];
     unsigned char *buffer = reinterpret_cast<unsigned char*> (temp->imageData);
 
     for (int i = 0; i < rows; i++) {
-        memcpy(this->dataCh + i*cols, buffer + i*iplCols, sizeof (unsigned char) * cols);
+        memcpy(*dataCh + i*cols, buffer + i*iplCols, sizeof (unsigned char) * cols);
     }
 
     cvReleaseImage(&temp);
@@ -55,7 +56,7 @@ void Classifier::update_dataCh(IplImage *m_grayImage) {
 
 void Classifier::init(IplImage *image, Rect trackedPatch) {
 
-    update_dataCh(image);
+    update_dataCh(image, &this->dataCh);
 
     numBaseClassifier = 100;
     searchFactor = 2;
@@ -98,16 +99,31 @@ void Classifier::init(IplImage *image, Rect trackedPatch) {
     delete trackingPatches;
 }
 
-float Classifier::classify(ImageRepresentation* image, Rect trackedPatch) {
-    return classifier->eval(image, trackedPatch);
+float Classifier::classify(IplImage *image, Rect trackedPatch) {
+
+    ImageRepresentation* rep;
+    unsigned char *dataCh;
+    float eval;
+    Size imageSize2;
+
+    imageSize2.height = image->height;
+    imageSize2.width = image->width;
+
+    update_dataCh(image, &dataCh);
+    rep = new ImageRepresentation(dataCh, imageSize2);
+    eval = classifier->eval(rep, trackedPatch);
+
+    delete rep;
+    delete dataCh;
+    return eval;
 }
 
 bool Classifier::train(IplImage *image, Rect trackedPatch) {
-    update_dataCh(image);
 
     Patches *trackingPatches;
-
     Rect searchRegion;
+
+    update_dataCh(image, &this->dataCh);
     searchRegion = this->getTrackingROI(searchFactor, trackedPatch);
     trackingPatches = new PatchesRegularScan(searchRegion, this->validROI, trackingRectSize, overlap);
     this->curFrameRep->setNewImageAndROI(this->dataCh, searchRegion);
