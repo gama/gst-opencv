@@ -448,7 +448,7 @@ gst_tracker_set_caps(GstPad * pad, GstCaps * caps)
 static GSList* has_intersection(CvRect *obj, GSList *objects);
 static void associate_detected_obj_to_tracker(GSList *detected_objects, GSList *trackers, GSList **unassociated_objects);
 static Tracker* closer_tracker_with_a_detected_obj_to(Tracker* tracker, GSList* trackers);
-void print_tracker(Tracker *tracker, IplImage *image);
+void print_tracker(Tracker *tracker, IplImage *image, gint id_tracker);
 
 
 typedef struct {
@@ -465,9 +465,10 @@ void associate_detected_obj_to_tracker(GSList *detected_objects, GSList *tracker
     CvRect *detected_obj;
     GSList *it_detected_obj, *it_tracker;
     gfloat dist_threshold;
+    gfloat ratio, old_area, new_area;
 
     // FIXME: select other threshold
-    dist_threshold = 7.0;
+    dist_threshold = 200.0;
 
     min_dist = G_MAXFLOAT;
     closer_tracker = NULL;
@@ -483,7 +484,8 @@ void associate_detected_obj_to_tracker(GSList *detected_objects, GSList *tracker
             tracker = (Tracker*)it_tracker->data;
             if (tracker != NULL)
             {
-                dist = euclidian_distance(rect_centroid(detected_obj), tracker->centroid);
+                dist = euclidian_distance(rect_centroid(detected_obj), cvPoint(tracker->filter->State[0], tracker->filter->State[1]));
+                GST_INFO("dist: %f", dist);
                 if (dist < min_dist)
                 {
                     min_dist = dist;
@@ -491,8 +493,21 @@ void associate_detected_obj_to_tracker(GSList *detected_objects, GSList *tracker
                 }
             }
         }
-        if (min_dist <= dist_threshold && closer_tracker != NULL)
+        if (min_dist <= dist_threshold && closer_tracker != NULL){
+            GST_INFO("tracker found a detected_obj");
             closer_tracker->detected_object = detected_obj;
+            //FIXME: tracker area update
+            /*
+            new_area = (float)detected_obj->width * detected_obj->height;
+            old_area = (float)closer_tracker->tracker_area.width * closer_tracker->tracker_area.height;
+            ratio = abs((new_area-old_area)/old_area);
+
+            if ( ratio <= 0.05 ){
+                closer_tracker->tracker_area.width = detected_obj->width;
+                closer_tracker->tracker_area.height = detected_obj->height;
+            }
+            */
+        }
         else if (detected_obj != NULL)
         {
             GST_INFO("adding CvRect(%d, %d, %d, %d) at unassociated_objects",
@@ -566,7 +581,8 @@ closer_tracker_with_a_detected_obj_to(Tracker* tracker, GSList* trackers)
         tr = (Tracker*)it_tracker->data;
 
         if (tr->detected_object != NULL){
-            dist = euclidian_distance(tracker->centroid, tr->centroid);
+            dist = euclidian_distance(  cvPoint(tracker->filter->State[0], tracker->filter->State[1]), 
+                                        cvPoint(tr->filter->State[0], tr->filter->State[1]));
             if (dist < min_dist){
                 closer_tracker = tr;
                 min_dist = dist;
@@ -585,6 +601,7 @@ distribution_test(CvRect rect, IplImage *image)
     CvPoint         p;
     gfloat          horizontal_sigma, vertical_sigma;
     float           center_x,center_y;
+    CvMat           *locations;
     
     pointCount = 100;
 
@@ -601,7 +618,7 @@ distribution_test(CvRect rect, IplImage *image)
     horizontal_sigma = rect.width/2.0 / 3.0; 
     vertical_sigma   = rect.height/2.0 / 3.0;
 
-    CvMat* locations = cvCreateMat(pointCount, 1, CV_32SC2);
+    locations = cvCreateMat(pointCount, 1, CV_32SC2);
 
     #if 0
     cvRandArr(&rng_state, locations, CV_RAND_UNI, cvScalar(rect.x,rect.y,0,0),
@@ -623,14 +640,23 @@ distribution_test(CvRect rect, IplImage *image)
     cvReleaseMat(&locations);
 }
 
-void print_tracker(Tracker *tracker, IplImage *image)
+void print_tracker(Tracker *tracker, IplImage *image, gint id_tracker)
 {
     int i;
 
     for (i = 0; i < tracker->filter->SamplesNum; i++) {
         cvCircle(image, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]),
-                        3, CV_RGB(0, 0, 255), 1, 8, 0);
+                        1*tracker->filter->flConfidence[i], 
+                        CV_RGB(0, (1-1.0/id_tracker)*255, (1.0/id_tracker)*255), 1, 8, 0);
     }
+
+    cvRectangle(image,  cvPoint(tracker->tracker_area.x, tracker->tracker_area.y), 
+                        cvPoint(    tracker->tracker_area.x+ tracker->tracker_area.width, 
+                                    tracker->tracker_area.y + tracker->tracker_area.height),
+                        CV_RGB(0, (1-1.0/id_tracker)*255, (1.0/id_tracker)*255), 2, 8, 0);
+
+    cvCircle(image, cvPoint(tracker->filter->State[0], tracker->filter->State[1]),
+                        10, CV_RGB((1-1.0/id_tracker)*255, 0, (1.0/id_tracker)*255), -1, 8, 0);
 }
 
 /* chain function
@@ -642,6 +668,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     GstTracker *filter;
     IplImage *swap_temp;
     CvPoint2D32f *swap_points;
+    gint id_tracker;
     float avg_x = 0.0;
 
 
@@ -673,7 +700,6 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
 
 
-    GST_INFO("trackers: %d\n", g_slist_length(filter->trackers));
 
     if (filter->detect_timestamp == GST_BUFFER_TIMESTAMP(buf) && filter->confidence_density_timestamp == GST_BUFFER_TIMESTAMP(buf))
     {
@@ -713,19 +739,23 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
             }
         }
 
-        // tracking
-        for (it_tracker = filter->trackers; it_tracker; it_tracker = it_tracker->next) {
-            GST_INFO("running tracker.");
-            tracker = (Tracker*)it_tracker->data;
-
-            closer_tracker = closer_tracker_with_a_detected_obj_to( tracker, filter->trackers );
-            tracker_run(tracker, closer_tracker, &filter->confidence_density);
-            print_tracker(tracker, filter->image);
-        }
-
         //TODO: review unassociated_objects list memory manage
         g_slist_free(unassociated_objects);
     }
+
+    // tracking
+    GST_INFO("trackers: %d\n", g_slist_length(filter->trackers));
+    id_tracker = 1;
+    for (it_tracker = filter->trackers; it_tracker; it_tracker = it_tracker->next) {
+        //GST_INFO("running tracker.");
+        tracker = (Tracker*)it_tracker->data;
+
+        closer_tracker = closer_tracker_with_a_detected_obj_to( tracker, filter->trackers );
+        tracker_run(tracker, closer_tracker, &filter->confidence_density);
+        print_tracker(tracker, filter->image, it_tracker);
+        id_tracker++;
+    }
+
 
 
     filter->prev_avg_x = avg_x;

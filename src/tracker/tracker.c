@@ -87,6 +87,8 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
     tracker->detected_object = g_new(CvRect,1);
     *tracker->detected_object = *region;
 
+    tracker->tracker_area = *region;
+
     lowerBound = cvCreateMat(state_vec_dim, 1, CV_32F);
     upperBound = cvCreateMat(state_vec_dim, 1, CV_32F);
 
@@ -186,14 +188,18 @@ tracker_run(Tracker *tracker, Tracker *closer_tracker_with_a_detected_obj, CvMat
         variance =sqrt( pow(closer_tracker_with_a_detected_obj->detected_object->width,2) + // diagonal
                         pow(closer_tracker_with_a_detected_obj->detected_object->height,2));
         po = gaussian_function(euclidian_distance(
-                                    tracker->centroid,
-                                    closer_tracker_with_a_detected_obj->centroid),
+                                    cvPoint(tracker->filter->State[0], tracker->filter->State[1]),
+                                    cvPoint(closer_tracker_with_a_detected_obj->filter->State[0],
+                                            closer_tracker_with_a_detected_obj->filter->State[1])),
                                mean, variance);
     }
     else po = 0.0f;
 
     tracker_resample(tracker, confidence_density, ctr, po);
     cvConDensUpdateByTime(tracker->filter);
+
+    tracker->tracker_area.x = tracker->filter->State[0] - tracker->tracker_area.width/2;
+    tracker->tracker_area.y = tracker->filter->State[1] - tracker->tracker_area.height/2;
 }
 
 // private methods
@@ -240,6 +246,7 @@ tracker_resample(Tracker *tracker, CvMat *confidence_density, gfloat ctr, gfloat
             dist = euclidian_distance(particle_pos, rect_centroid(tracker->detected_object));
 
             mean = 0;
+            //TODO: is it the best variance to use?
             variance =  sqrt(   pow(tracker->detected_object->width,2) + // diagonal
                                 pow(tracker->detected_object->height,2));
 
@@ -250,15 +257,18 @@ tracker_resample(Tracker *tracker, CvMat *confidence_density, gfloat ctr, gfloat
             }
             else confidence_density_term = 1.0;
 
+            #if 0
             tracker->filter->flConfidence[i] = tracker->beta * has_detected_obj * likelihood +
                                                tracker->gamma * po * confidence_density_term +
                                                tracker->mi   * ctr;
+            #else
+            tracker->filter->flConfidence[i] = tracker->gamma * po * confidence_density_term;
+            #endif
+
         } else tracker->filter->flConfidence[i] = 0;
 
     }
 
-    tracker->centroid.x = top_left.x + bottom_right.x/2;
-    tracker->centroid.y = top_left.y + bottom_right.y/2;
 }
 
 
@@ -270,9 +280,12 @@ rect_is_null(CvRect rect)
 }
 
 static gfloat
-gaussian_function(gfloat x, gfloat mean, gfloat variance)
+gaussian_function(gfloat x, gfloat mean, gfloat standard_deviation)
 {
     // variance = sigma^2
+    gfloat variance;
+    variance = standard_deviation*standard_deviation;
+
     return ((1 / sqrt(2 * M_PI * variance)) * exp(-((x - mean) * (x - mean))/(2 * variance)));
 }
 

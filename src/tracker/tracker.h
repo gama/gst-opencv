@@ -62,7 +62,7 @@ struct _Tracker
     gfloat          gamma;
     gfloat          beta;
     CvRect          *detected_object;
-    CvPoint         centroid;
+    CvRect          tracker_area;
     CvSize          image_size;
 };
 
