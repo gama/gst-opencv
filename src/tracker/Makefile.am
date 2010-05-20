@@ -13,6 +13,7 @@ libgsttracker_la_SOURCES =								\
 # add other _CFLAGS and _LIBS as needed
 libgsttracker_la_CFLAGS =								\
 	-I$(top_srcdir)/src/common							\
+	-I$(top_srcdir)/src/onlineboost						\
 	$(GST_CFLAGS)										\
 	$(OPENCV_CFLAGS)									\
 	$(NULL)

@@ -724,7 +724,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
                 if (unassociated_obj->count >= num_subsequent_detections) {
                     new_tracker = tracker_new( &unassociated_obj->region, 4, 4,
                                                 num_particles,
-                                                cvSize(filter->image->width, filter->image->height),
+                                                filter->image,
                                                 beta, gamma, mi );
                     filter->trackers = g_slist_prepend(filter->trackers, new_tracker);
 
@@ -751,7 +751,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
         tracker = (Tracker*)it_tracker->data;
 
         closer_tracker = closer_tracker_with_a_detected_obj_to( tracker, filter->trackers );
-        tracker_run(tracker, closer_tracker, &filter->confidence_density);
+        tracker_run(tracker, closer_tracker, &filter->confidence_density, filter->image );
         print_tracker(tracker, filter->image, it_tracker);
         id_tracker++;
     }
