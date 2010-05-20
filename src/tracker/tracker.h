@@ -83,10 +83,4 @@ void            tracker_run  (Tracker *tracker,
 
 CvPoint         rect_centroid(CvRect *rect);
 
-
-// Simbols of 'Classifier' class (c++)
-void            classifier_intermediate_init    (IplImage *image, CvRect rect);
-void            classifier_intermediate_train   (IplImage *image, CvRect rect);
-float           classifier_intermediate_classify(IplImage *image, CvRect rect);
-
 #endif // __GST_TRACKER_H__

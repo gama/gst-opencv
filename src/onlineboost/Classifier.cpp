@@ -139,3 +139,26 @@ bool Classifier::train(IplImage *image, Rect trackedPatch) {
 
     return true;
 }
+
+Rect Classifier::convert_cvrect_to_rect(CvRect rect){
+    Rect trackedPatch;
+    trackedPatch.upper = rect.y;
+    trackedPatch.left = rect.x;
+    trackedPatch.height = rect.height;
+    trackedPatch.width = rect.width;
+    return trackedPatch;
+}
+
+extern "C" void classifier_intermediate_init(Classifier* cls, IplImage *image, CvRect rect) {
+    cls->init(image, cls->convert_cvrect_to_rect(rect));
+    return;
+}
+
+extern "C" void classifier_intermediate_train(Classifier* cls, IplImage *image, CvRect rect) {
+    cls->train(image, cls->convert_cvrect_to_rect(rect));
+    return;
+}
+
+extern "C" float classifier_intermediate_classify(Classifier* cls, IplImage *image, CvRect rect) {
+    return cls->classify(image, cls->convert_cvrect_to_rect(rect));
+}

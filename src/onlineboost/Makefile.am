@@ -12,7 +12,6 @@ noinst_LTLIBRARIES = libonlineboost.la
 libonlineboost_la_SOURCES =						\
 	BaseClassifier.cpp							\
 	Classifier.cpp                              \
-	ClassifierIntermediate.cpp					\
 	ClassifierThreshold.cpp						\
 	Detector.cpp								\
 	EstimatedGaussDistribution.cpp				\

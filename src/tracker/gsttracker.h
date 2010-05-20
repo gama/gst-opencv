@@ -53,6 +53,7 @@
 #include <cvaux.h>
 
 #include "tracker.h"
+#include "../onlineboost/Classifier.h"
 
 #define MIN_AREA_MOTION_CONSIDERED (40*40)
 
