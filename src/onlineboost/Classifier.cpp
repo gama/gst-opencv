@@ -125,6 +125,10 @@ bool Classifier::train(IplImage *image, Rect trackedPatch) {
 
     update_dataCh(image, &this->dataCh);
     searchRegion = this->getTrackingROI(searchFactor, trackedPatch);
+
+    if(searchRegion.height < trackingRectSize.height || searchRegion.width < trackingRectSize.width)
+        return false;
+
     trackingPatches = new PatchesRegularScan(searchRegion, this->validROI, trackingRectSize, overlap);
     this->curFrameRep->setNewImageAndROI(this->dataCh, searchRegion);
 
@@ -137,6 +141,7 @@ bool Classifier::train(IplImage *image, Rect trackedPatch) {
     classifier->update(this->curFrameRep, trackingPatches->getSpecialRect("LowerRight"), -1);
     classifier->update(this->curFrameRep, trackedPatch, 1);
 
+    delete trackingPatches;
     return true;
 }
 
@@ -149,16 +154,30 @@ Rect Classifier::convert_cvrect_to_rect(CvRect rect){
     return trackedPatch;
 }
 
-extern "C" void classifier_intermediate_init(Classifier* cls, IplImage *image, CvRect rect) {
-    cls->init(image, cls->convert_cvrect_to_rect(rect));
-    return;
+extern "C"
+CClassifier* classifier_intermediate_init(IplImage *image, CvRect rect) {
+    CClassifier* cls = (CClassifier*) cvAlloc(sizeof(CClassifier));
+    cls->cplusplus_classifier = new Classifier();
+    Rect rrect = ((Classifier*) cls->cplusplus_classifier)->convert_cvrect_to_rect(rect);
+    ((Classifier*) cls->cplusplus_classifier)->init(image, rrect);
+    return cls;
 }
 
-extern "C" void classifier_intermediate_train(Classifier* cls, IplImage *image, CvRect rect) {
-    cls->train(image, cls->convert_cvrect_to_rect(rect));
-    return;
+extern "C"
+int classifier_intermediate_train(CClassifier* cls, IplImage *image, CvRect rect) {
+    Rect rrect = ((Classifier*) cls->cplusplus_classifier)->convert_cvrect_to_rect(rect);
+    return (((Classifier*) cls->cplusplus_classifier)->train(image, rrect))?1:0;
 }
 
-extern "C" float classifier_intermediate_classify(Classifier* cls, IplImage *image, CvRect rect) {
-    return cls->classify(image, cls->convert_cvrect_to_rect(rect));
+extern "C"
+float classifier_intermediate_classify(CClassifier* cls, IplImage *image, CvRect rect) {
+    Rect rrect = ((Classifier*) cls->cplusplus_classifier)->convert_cvrect_to_rect(rect);
+    return ((Classifier*) cls->cplusplus_classifier)->classify(image, rrect);
+}
+
+extern "C"
+void classifier_intermediate_release(CClassifier* cls) {
+    if (cls == NULL) return;
+    delete (Classifier*) cls->cplusplus_classifier;
+    cvFree(&cls);
 }

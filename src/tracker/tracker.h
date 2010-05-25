@@ -66,24 +66,30 @@ struct _Tracker
     CvRect          *detected_object;
     CvRect          tracker_area;
     CvSize          image_size;
-    Classifier      *classifier;
+    CClassifier    *classifier;
+    CvPoint         previous_centroid;
 };
 
-Tracker*        tracker_new  (const CvRect *region,
-                              gint          state_vec_dim,
-                              gint          measurement_vec_dim,
-                              gint          num_particles,
-                              IplImage      *image,
-                              gfloat        beta,
-                              gfloat        gama,
-                              gfloat        mi);
+Tracker*        tracker_new         (const CvRect *region,
+                                     gint          state_vec_dim,
+                                     gint          measurement_vec_dim,
+                                     gint          num_particles,
+                                     IplImage     *image,
+                                     gfloat        beta,
+                                     gfloat        gama,
+                                     gfloat        mi);
 
-void            tracker_free (Tracker *tracker);
+void            tracker_free        (Tracker      *tracker);
 
-void            tracker_run  (Tracker *tracker,
-                              Tracker *closer_tracker_with_a_detected_obj,
-                              CvMat   *confidence_density, IplImage *image);
+void            tracker_run         (Tracker      *tracker,
+                                     Tracker      *closer_tracker_with_a_detected_obj,
+                                     CvMat        *confidence_density,
+                                     IplImage     *image);
 
-CvPoint         rect_centroid(CvRect *rect);
+CvPoint         rect_centroid       (CvRect       *rect);
+
+gfloat          gaussian_function   (gfloat        x,
+                                     gfloat        mean,
+                                     gfloat        standard_deviation);
 
 #endif // __GST_TRACKER_H__

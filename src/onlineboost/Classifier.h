@@ -39,11 +39,6 @@ private:
     Size trackingRectSize;
 };
 
-#else
-
-typedef struct Classifier {
-} Classifier;
-
 #endif
 
 
@@ -54,9 +49,15 @@ extern "C" {
 
 #endif
 
-    void classifier_intermediate_init(struct Classifier* cls, IplImage *image, CvRect rect);
-    void classifier_intermediate_train(struct Classifier* cls, IplImage *image, CvRect rect);
-    float classifier_intermediate_classify(struct Classifier* cls, IplImage *image, CvRect rect);
+    struct _CClassifier {
+        void* cplusplus_classifier;
+    };
+    typedef struct _CClassifier CClassifier;
+
+    CVAPI(CClassifier*) classifier_intermediate_init(IplImage *image, CvRect rect);
+    void classifier_intermediate_release(CClassifier* cls);
+    int classifier_intermediate_train(CClassifier* cls, IplImage *image, CvRect rect);
+    float classifier_intermediate_classify(CClassifier* cls, IplImage *image, CvRect rect);
 
 #ifdef __cplusplus
 

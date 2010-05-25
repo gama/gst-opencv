@@ -56,7 +56,6 @@
 
 // private function prototypes
 static void     tracker_resample   (Tracker *tracker, CvMat *confidence_density, IplImage *image, gfloat po);
-static gfloat   gaussian_function  (gfloat x, gfloat mean, gfloat variance);
 
 Tracker*
 tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
@@ -86,7 +85,6 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
     *tracker->detected_object = *region;
 
     tracker->tracker_area = *region;
-    tracker->classifier = g_new(Classifier, 1);
 
     lowerBound = cvCreateMat(state_vec_dim, 1, CV_32F);
     upperBound = cvCreateMat(state_vec_dim, 1, CV_32F);
@@ -153,7 +151,7 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
     }
 
     // init learn process
-    classifier_intermediate_init(tracker->classifier, image, *tracker->detected_object);
+    tracker->classifier = classifier_intermediate_init(image, *tracker->detected_object);
 
     cvReleaseMat(&particle_positions);
     cvReleaseMat(&lowerBound);
@@ -184,6 +182,7 @@ tracker_run(Tracker *tracker, Tracker *closer_tracker_with_a_detected_obj, CvMat
     // reliability of the detector confidence density
     if (tracker->detected_object != NULL){ // if a detection was associated to the tracker
         po = 1.0f;
+        // FIXME: use the return of function
         classifier_intermediate_train(tracker->classifier, image, *tracker->detected_object);
     }
     else if (closer_tracker_with_a_detected_obj != NULL){
@@ -201,6 +200,7 @@ tracker_run(Tracker *tracker, Tracker *closer_tracker_with_a_detected_obj, CvMat
     tracker_resample(tracker, confidence_density, image, po);
     cvConDensUpdateByTime(tracker->filter);
 
+    tracker->previous_centroid = rect_centroid(&tracker->tracker_area);
     tracker->tracker_area.x = tracker->filter->State[0] - tracker->tracker_area.width/2;
     tracker->tracker_area.y = tracker->filter->State[1] - tracker->tracker_area.height/2;
 }
@@ -286,7 +286,7 @@ rect_is_null(CvRect rect)
     return ((rect.x == 0) && (rect.y == 0) && (rect.width == 0) && (rect.height == 0));
 }
 
-static gfloat
+gfloat
 gaussian_function(gfloat x, gfloat mean, gfloat standard_deviation)
 {
     // variance = sigma^2

@@ -446,7 +446,7 @@ gst_tracker_set_caps(GstPad * pad, GstCaps * caps)
 
 
 static GSList* has_intersection(CvRect *obj, GSList *objects);
-static void associate_detected_obj_to_tracker(GSList *detected_objects, GSList *trackers, GSList **unassociated_objects);
+static void associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSList *trackers, GSList **unassociated_objects);
 static Tracker* closer_tracker_with_a_detected_obj_to(Tracker* tracker, GSList* trackers);
 void print_tracker(Tracker *tracker, IplImage *image, gint id_tracker);
 
@@ -456,9 +456,40 @@ typedef struct {
     guint count;
 } unassociated_obj_t;
 
+float dist_calc(CvPoint p1, CvPoint p2)
+{
+    return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2));
+}
+
+float dist_point_to_segment(float x, float y, float x1, float y1, float x2, float y2)
+{
+    float A = x - x1;
+    float B = y - y1;
+    float C = x2 - x1;
+    float D = y2 - y1;
+
+    float dot = A * C + B * D;
+    float len_sq = C * C + D * D;
+    float param = dot / len_sq;
+
+    float xx, yy;
+
+    if (param < 0) {
+        xx = x1;
+        yy = y1;
+    } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+    } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+    }
+
+    return sqrt(((x - xx) * (x - xx)) + ((y - yy) * (y - yy)));
+}
 
 // FIXME implement the greedy algorithm
-void associate_detected_obj_to_tracker(GSList *detected_objects, GSList *trackers, GSList **unassociated_objects)
+void associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSList *trackers, GSList **unassociated_objects)
 {
     Tracker *closer_tracker, *tracker;
     gfloat min_dist, dist;
@@ -484,6 +515,57 @@ void associate_detected_obj_to_tracker(GSList *detected_objects, GSList *tracker
             tracker = (Tracker*)it_tracker->data;
             if (tracker != NULL)
             {
+
+                #if 0
+                //-------------------
+
+                gfloat part_a, part_b, part_c;
+                CvPoint rect_centroid_d = rect_centroid(detected_obj);
+
+
+                // PART A
+                {
+                    gfloat area_tr = tracker->tracker_area.height * tracker->tracker_area.width;
+                    gfloat area_d = detected_obj->height * detected_obj->width;
+                    CvPoint rect_centroid_tr = rect_centroid(&tracker->tracker_area);
+
+                    // mean = 0, variance = 0.4
+                    part_a = gaussian_function((gfloat) ((area_tr - area_d) / area_tr), 0, 0.4);
+
+                    gfloat dist_temp = abs(dist_calc(rect_centroid_tr, rect_centroid_d));
+
+                    const gfloat threshold_dist = 20;
+                    if (dist_temp > threshold_dist)
+                        dist_temp = dist_point_to_segment(rect_centroid_d.x, rect_centroid_d.y, rect_centroid_tr.x, rect_centroid_tr.y,
+                            tracker->previous_centroid.x, tracker->previous_centroid.y);
+
+                    // mean = 25, variance = 5
+                    part_a *= gaussian_function(dist_temp, 25, 5);
+                }
+
+
+                // PART B
+                part_b = classifier_intermediate_classify(tracker->classifier, image, tracker->tracker_area);
+
+
+                // PART C
+                {
+                    part_c = 0;
+                    int i;
+                    gfloat particles_dist_to_d;
+                    for (i = 0; i < tracker->filter->SamplesNum; ++i) {
+                        particles_dist_to_d = abs(dist_calc(rect_centroid_d, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1])));
+                        part_c += gaussian_function(particles_dist_to_d, 110, 57);
+                    }
+                }
+
+
+                gfloat result = part_a * (part_b*10 + part_c);
+                printf("A:%5.3f B:%5.3f C:%5.3f RESULT:%5.3f\n", part_a, part_b, part_c, result);
+
+                //---------------------------
+                #endif
+
                 dist = euclidian_distance(rect_centroid(detected_obj), cvPoint(tracker->filter->State[0], tracker->filter->State[1]));
                 GST_INFO("dist: %f", dist);
                 if (dist < min_dist)
@@ -706,7 +788,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
 
         GST_INFO("detected_objects: %d", g_slist_length(filter->detected_objects));
         // data association
-        associate_detected_obj_to_tracker(filter->detected_objects, filter->trackers, &unassociated_objects);
+        associate_detected_obj_to_tracker(filter->image, filter->detected_objects, filter->trackers, &unassociated_objects);
         GST_INFO("unassociated_objects: %d", g_slist_length(unassociated_objects));
 
         // creating tracker for new detected object
