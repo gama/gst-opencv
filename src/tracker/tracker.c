@@ -218,6 +218,8 @@ tracker_resample(Tracker *tracker, CvMat *confidence_density, IplImage *image, g
     double  confidence_density_term;
     gfloat  dist;
     CvPoint top_left, bottom_right;
+    CvRect tr_rect;
+    CvPoint tr_rect_origin, tr_rect_original_centroid;
 
     // sanity checks
     g_assert(tracker != NULL);
@@ -227,6 +229,10 @@ tracker_resample(Tracker *tracker, CvMat *confidence_density, IplImage *image, g
     top_left = cvPoint(tracker->filter->flSamples[0][0], tracker->filter->flSamples[0][1]);
     bottom_right = cvPoint(tracker->filter->flSamples[0][0], tracker->filter->flSamples[0][1]);
 
+    // Store informations to create the rect centralized in each particle
+    tr_rect = *tracker->detected_object;
+    tr_rect_origin = cvPoint(tr_rect.x, tr_rect.y);
+    tr_rect_original_centroid = rect_centroid(tracker->detected_object);
 
     for (i = 0; i < tracker->filter->SamplesNum; i++) {
         particle_pos = cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]);
@@ -256,8 +262,10 @@ tracker_resample(Tracker *tracker, CvMat *confidence_density, IplImage *image, g
 
             likelihood   = gaussian_function(dist, mean, variance);
 
-            //FIXME: classify function must receive a position to evaluate its weigth on the learning pattern
-            //ctr  = classifier_intermediate_classify(tracker->classifier, image, particle_pos);
+            // Moves the object rect so that it centered on the particle
+            tr_rect.x = tr_rect_origin.x + particle_pos.x - tr_rect_original_centroid.x;
+            tr_rect.y = tr_rect_origin.y + particle_pos.y - tr_rect_original_centroid.y;
+            ctr = classifier_intermediate_classify(tracker->classifier, image, tr_rect);
 
             if (confidence_density){
                 confidence_density_term = cvGetReal2D( confidence_density, particle_pos.y, particle_pos.x );
