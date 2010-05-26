@@ -587,7 +587,7 @@ void associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects
             if ( ratio <= 0.05 ){
                 closer_tracker->tracker_area.width = detected_obj->width;
                 closer_tracker->tracker_area.height = detected_obj->height;
-            }
+                }
             */
         }
         else if (detected_obj != NULL)
@@ -727,13 +727,14 @@ void print_tracker(Tracker *tracker, IplImage *image, gint id_tracker)
     int i;
 
     for (i = 0; i < tracker->filter->SamplesNum; i++) {
-        cvCircle(image, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]),
-                        1*tracker->filter->flConfidence[i], 
-                        CV_RGB(0, (1-1.0/id_tracker)*255, (1.0/id_tracker)*255), 1, 8, 0);
+        if (tracker->filter->flConfidence[i] >= 0)
+            cvCircle(image, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]),
+                            1*tracker->filter->flConfidence[i], 
+                            CV_RGB(0, (1-1.0/id_tracker)*255, (1.0/id_tracker)*255), 1, 8, 0);
     }
 
     cvRectangle(image,  cvPoint(tracker->tracker_area.x, tracker->tracker_area.y), 
-                        cvPoint(    tracker->tracker_area.x+ tracker->tracker_area.width, 
+                        cvPoint(    tracker->tracker_area.x + tracker->tracker_area.width, 
                                     tracker->tracker_area.y + tracker->tracker_area.height),
                         CV_RGB(0, (1-1.0/id_tracker)*255, (1.0/id_tracker)*255), 2, 8, 0);
 
@@ -752,6 +753,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     CvPoint2D32f *swap_points;
     gint id_tracker;
     float avg_x = 0.0;
+    IplImage *image;
 
 
     GSList *unassociated_objects = NULL;
@@ -769,9 +771,9 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     Tracker *closer_tracker = NULL;
 
     // choose better values
-    gfloat beta = 0.7;
-    gfloat gamma = 0.2;
-    gfloat mi   = 0.3;
+    gfloat beta = 0.2;
+    gfloat gamma = 0.7;
+    gfloat mi   = 0.1;
 
 
     guint  num_particles = 100;
@@ -780,7 +782,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     filter->image->imageData = (char *) GST_BUFFER_DATA(buf);
 
     cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
-
+    image = cvCloneImage(filter->image);
 
 
     if (filter->detect_timestamp == GST_BUFFER_TIMESTAMP(buf) && filter->confidence_density_timestamp == GST_BUFFER_TIMESTAMP(buf))
@@ -788,7 +790,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
 
         GST_INFO("detected_objects: %d", g_slist_length(filter->detected_objects));
         // data association
-        associate_detected_obj_to_tracker(filter->image, filter->detected_objects, filter->trackers, &unassociated_objects);
+        associate_detected_obj_to_tracker(image, filter->detected_objects, filter->trackers, &unassociated_objects);
         GST_INFO("unassociated_objects: %d", g_slist_length(unassociated_objects));
 
         // creating tracker for new detected object
@@ -806,7 +808,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
                 if (unassociated_obj->count >= num_subsequent_detections) {
                     new_tracker = tracker_new( &unassociated_obj->region, 4, 4,
                                                 num_particles,
-                                                filter->image,
+                                                image,
                                                 beta, gamma, mi );
                     filter->trackers = g_slist_prepend(filter->trackers, new_tracker);
 
@@ -833,7 +835,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
         tracker = (Tracker*)it_tracker->data;
 
         closer_tracker = closer_tracker_with_a_detected_obj_to( tracker, filter->trackers );
-        tracker_run(tracker, closer_tracker, &filter->confidence_density, filter->image );
+        tracker_run(tracker, closer_tracker, &filter->confidence_density, image );
         print_tracker(tracker, filter->image, it_tracker);
         id_tracker++;
     }

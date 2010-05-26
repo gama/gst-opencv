@@ -217,6 +217,7 @@ tracker_resample(Tracker *tracker, CvMat *confidence_density, IplImage *image, g
     gint    i;
     double  confidence_density_term;
     gfloat  dist;
+    gfloat min_ctr;
     CvPoint top_left, bottom_right;
     CvRect tr_rect;
     CvPoint tr_rect_origin, tr_rect_original_centroid;
@@ -226,13 +227,12 @@ tracker_resample(Tracker *tracker, CvMat *confidence_density, IplImage *image, g
 
     has_detected_obj = tracker->detected_object != NULL ? 1.0f: 0.0f;
 
-    top_left = cvPoint(tracker->filter->flSamples[0][0], tracker->filter->flSamples[0][1]);
-    bottom_right = cvPoint(tracker->filter->flSamples[0][0], tracker->filter->flSamples[0][1]);
-
     // Store informations to create the rect centralized in each particle
-    tr_rect = *tracker->detected_object;
+    tr_rect = tracker->tracker_area;
     tr_rect_origin = cvPoint(tr_rect.x, tr_rect.y);
-    tr_rect_original_centroid = rect_centroid(tracker->detected_object);
+    tr_rect_original_centroid = rect_centroid(tracker->tracker_area);
+
+    min_ctr = G_MAXFLOAT;
 
     for (i = 0; i < tracker->filter->SamplesNum; i++) {
         particle_pos = cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]);
@@ -240,19 +240,7 @@ tracker_resample(Tracker *tracker, CvMat *confidence_density, IplImage *image, g
         if (particle_pos.x < tracker->image_size.width && particle_pos.y < tracker->image_size.height
             && particle_pos.x >= 0 && particle_pos.y >= 0)
         {
-
-            if (particle_pos.x < top_left.x)
-                top_left.x = particle_pos.x;
-
-            if (particle_pos.y < top_left.y)
-                top_left.y = particle_pos.y;
-
-            if (particle_pos.x > bottom_right.x)
-                bottom_right.x = particle_pos.x;
-
-            if (particle_pos.y > bottom_right.y)
-                bottom_right.y = particle_pos.y;
-
+            //FIXME: use this only with a detected object associated
             dist = euclidian_distance(particle_pos, rect_centroid(tracker->detected_object));
 
             mean = 0;
@@ -277,12 +265,21 @@ tracker_resample(Tracker *tracker, CvMat *confidence_density, IplImage *image, g
                                                tracker->gamma * po * confidence_density_term +
                                                tracker->mi   * ctr;
             #else
-            tracker->filter->flConfidence[i] = tracker->gamma * po * confidence_density_term;
+            //tracker->filter->flConfidence[i] = confidence_density_term;
+            tracker->filter->flConfidence[i] = ctr ;
+            //tracker->filter->flConfidence[i] = has_detected_obj * likelihood;
             #endif
+           if (min_ctr > tracker->filter->flConfidence[i])
+               min_ctr = tracker->filter->flConfidence[i];
+
 
         } else tracker->filter->flConfidence[i] = 0;
 
     }
+    if (min_ctr < 0)
+        for (i = 0; i < tracker->filter->SamplesNum; i++)
+            tracker->filter->flConfidence[i] = tracker->filter->flConfidence[i] - min_ctr;
+
 
 }
 
