@@ -496,7 +496,6 @@ void associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects
     CvRect *detected_obj;
     GSList *it_detected_obj, *it_tracker;
     gfloat dist_threshold;
-    gfloat ratio, old_area, new_area;
 
     // FIXME: select other threshold
     dist_threshold = 200.0;
@@ -578,17 +577,6 @@ void associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects
         if (min_dist <= dist_threshold && closer_tracker != NULL){
             GST_INFO("tracker found a detected_obj");
             closer_tracker->detected_object = detected_obj;
-            //FIXME: tracker area update
-            /*
-            new_area = (float)detected_obj->width * detected_obj->height;
-            old_area = (float)closer_tracker->tracker_area.width * closer_tracker->tracker_area.height;
-            ratio = abs((new_area-old_area)/old_area);
-
-            if ( ratio <= 0.05 ){
-                closer_tracker->tracker_area.width = detected_obj->width;
-                closer_tracker->tracker_area.height = detected_obj->height;
-                }
-            */
         }
         else if (detected_obj != NULL)
         {
@@ -725,21 +713,23 @@ distribution_test(CvRect rect, IplImage *image)
 void print_tracker(Tracker *tracker, IplImage *image, gint id_tracker)
 {
     int i;
+    gfloat intensity;
 
     for (i = 0; i < tracker->filter->SamplesNum; i++) {
-        if (tracker->filter->flConfidence[i] >= 0)
+            intensity =  tracker->filter->flConfidence[i]/tracker->max_confidence;
+
+
             cvCircle(image, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]),
-                            1*tracker->filter->flConfidence[i], 
-                            CV_RGB(0, (1-1.0/id_tracker)*255, (1.0/id_tracker)*255), 1, 8, 0);
+                            3, CV_RGB(0, (1-intensity)*255, intensity * 255), -1, 8, 0);
     }
 
-    cvRectangle(image,  cvPoint(tracker->tracker_area.x, tracker->tracker_area.y), 
-                        cvPoint(    tracker->tracker_area.x + tracker->tracker_area.width, 
-                                    tracker->tracker_area.y + tracker->tracker_area.height),
+    cvRectangle(image,  cvPoint(tracker->tracker_area.x, tracker->tracker_area.y),
+                        cvPoint(tracker->tracker_area.x + tracker->tracker_area.width,
+                                tracker->tracker_area.y + tracker->tracker_area.height),
                         CV_RGB(0, (1-1.0/id_tracker)*255, (1.0/id_tracker)*255), 2, 8, 0);
 
     cvCircle(image, cvPoint(tracker->filter->State[0], tracker->filter->State[1]),
-                        10, CV_RGB((1-1.0/id_tracker)*255, 0, (1.0/id_tracker)*255), -1, 8, 0);
+                        10, CV_RGB((1-1.0/id_tracker)*255, 0, (1.0/id_tracker)*255), 2, 8, 0);
 }
 
 /* chain function
@@ -771,9 +761,9 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     Tracker *closer_tracker = NULL;
 
     // choose better values
-    gfloat beta = 0.2;
-    gfloat gamma = 0.7;
-    gfloat mi   = 0.1;
+    gfloat beta = 0.7;
+    gfloat gamma = 0.5;
+    gfloat mi   = 0.2;
 
 
     guint  num_particles = 100;

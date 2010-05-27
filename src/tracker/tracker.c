@@ -144,13 +144,18 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
 
     #endif
 
+    tracker->max_confidence = 0;
     for (i = 0; i < num_particles; ++i) {
         pos = *(CvPoint*)cvPtr1D(particle_positions, i, 0);
         tracker->filter->flSamples[i][0] = pos.x;  //0 -> x coord
         tracker->filter->flSamples[i][1] = pos.y; //1 -> y coord
+
+        if (tracker->max_confidence < tracker->filter->flConfidence[i])
+           tracker->max_confidence = tracker->filter->flConfidence[i];
     }
 
     // init learn process
+    GST_INFO("Initial training...");
     tracker->classifier = classifier_intermediate_init(image, *tracker->detected_object);
 
     cvReleaseMat(&particle_positions);
@@ -174,6 +179,7 @@ void
 tracker_run(Tracker *tracker, Tracker *closer_tracker_with_a_detected_obj, CvMat *confidence_density, IplImage *image)
 {
     gfloat po, mean, variance;
+    gfloat new_area, old_area, ratio;
 
     // sanity checks
     g_assert(tracker != NULL);
@@ -182,12 +188,23 @@ tracker_run(Tracker *tracker, Tracker *closer_tracker_with_a_detected_obj, CvMat
     // reliability of the detector confidence density
     if (tracker->detected_object != NULL){ // if a detection was associated to the tracker
         po = 1.0f;
+
         // FIXME: use the return of function
         classifier_intermediate_train(tracker->classifier, image, *tracker->detected_object);
+
+        new_area = (float)tracker->detected_object->width * tracker->detected_object->height;
+        old_area = (float)tracker->tracker_area.width * tracker->tracker_area.height;
+
+        ratio = abs(new_area-old_area)/old_area;
+
+        printf("new_area: %f, old_area: %f, ratio: %f\n", new_area, old_area, ratio);
+        if ( ratio <= 0.2 )
+            tracker->tracker_area = *tracker->detected_object;
+
     }
     else if (closer_tracker_with_a_detected_obj != NULL){
-        mean = 0.0f;
-        variance =sqrt( pow(closer_tracker_with_a_detected_obj->detected_object->width,2) + // diagonal
+        mean = 1.0f;
+        variance = sqrt( pow(closer_tracker_with_a_detected_obj->detected_object->width,2) + // diagonal
                         pow(closer_tracker_with_a_detected_obj->detected_object->height,2));
         po = gaussian_function(euclidian_distance(
                                     cvPoint(tracker->filter->State[0], tracker->filter->State[1]),
@@ -212,43 +229,47 @@ tracker_resample(Tracker *tracker, CvMat *confidence_density, IplImage *image, g
 {
     CvPoint particle_pos;
     gfloat  mean, variance;
-    gfloat  likelihood, has_detected_obj;
+    gfloat  likelihood;
+    gboolean has_detected_obj;
     gfloat  ctr;
     gint    i;
     double  confidence_density_term;
     gfloat  dist;
-    gfloat min_ctr;
-    CvPoint top_left, bottom_right;
+    gfloat min_confidence;
     CvRect tr_rect;
     CvPoint tr_rect_origin, tr_rect_original_centroid;
 
     // sanity checks
     g_assert(tracker != NULL);
 
-    has_detected_obj = tracker->detected_object != NULL ? 1.0f: 0.0f;
+    has_detected_obj = tracker->detected_object != NULL ? TRUE: FALSE;
 
     // Store informations to create the rect centralized in each particle
     tr_rect = tracker->tracker_area;
     tr_rect_origin = cvPoint(tr_rect.x, tr_rect.y);
-    tr_rect_original_centroid = rect_centroid(tracker->tracker_area);
+    tr_rect_original_centroid = rect_centroid(&tracker->tracker_area);
 
-    min_ctr = G_MAXFLOAT;
+    min_confidence = G_MAXFLOAT;
+    tracker->max_confidence = 0;
 
     for (i = 0; i < tracker->filter->SamplesNum; i++) {
         particle_pos = cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]);
         // FIXME: check if some particles can have negative positition?
-        if (particle_pos.x < tracker->image_size.width && particle_pos.y < tracker->image_size.height
-            && particle_pos.x >= 0 && particle_pos.y >= 0)
+        if (particle_pos.x < tracker->image_size.width &&
+            particle_pos.y < tracker->image_size.height &&
+            particle_pos.x >= 0 && particle_pos.y >= 0)
         {
-            //FIXME: use this only with a detected object associated
-            dist = euclidian_distance(particle_pos, rect_centroid(tracker->detected_object));
+            if (has_detected_obj){
+                dist = euclidian_distance(particle_pos, rect_centroid(tracker->detected_object));
 
-            mean = 0;
-            //TODO: is it the best variance to use?
-            variance =  sqrt(   pow(tracker->detected_object->width,2) + // diagonal
+                mean = 10;
+                //TODO: is it the best variance to use?
+                variance =  sqrt(   pow(tracker->detected_object->width,2) + // diagonal
                                 pow(tracker->detected_object->height,2));
 
-            likelihood   = gaussian_function(dist, mean, variance);
+                likelihood   = gaussian_function(dist, mean, variance);
+            }
+            else likelihood = 0;
 
             // Moves the object rect so that it centered on the particle
             tr_rect.x = tr_rect_origin.x + particle_pos.x - tr_rect_original_centroid.x;
@@ -260,27 +281,23 @@ tracker_resample(Tracker *tracker, CvMat *confidence_density, IplImage *image, g
             }
             else confidence_density_term = 1.0;
 
-            #if 0
-            tracker->filter->flConfidence[i] = tracker->beta * has_detected_obj * likelihood +
+            tracker->filter->flConfidence[i] = tracker->beta * likelihood +
                                                tracker->gamma * po * confidence_density_term +
-                                               tracker->mi   * ctr;
-            #else
-            //tracker->filter->flConfidence[i] = confidence_density_term;
-            tracker->filter->flConfidence[i] = ctr ;
-            //tracker->filter->flConfidence[i] = has_detected_obj * likelihood;
-            #endif
-           if (min_ctr > tracker->filter->flConfidence[i])
-               min_ctr = tracker->filter->flConfidence[i];
+                                               tracker->mi   * ctr
+            if (min_confidence > tracker->filter->flConfidence[i])
+               min_confidence = tracker->filter->flConfidence[i];
+            if (tracker->max_confidence < tracker->filter->flConfidence[i])
+               tracker->max_confidence = tracker->filter->flConfidence[i];
 
 
         } else tracker->filter->flConfidence[i] = 0;
 
     }
-    if (min_ctr < 0)
+
+    // min confidence of the particles is shift to 0 if it is negativo
+    if (min_confidence < 0)
         for (i = 0; i < tracker->filter->SamplesNum; i++)
-            tracker->filter->flConfidence[i] = tracker->filter->flConfidence[i] - min_ctr;
-
-
+            tracker->filter->flConfidence[i] = tracker->filter->flConfidence[i] - min_confidence;
 }
 
 
@@ -300,4 +317,3 @@ gaussian_function(gfloat x, gfloat mean, gfloat standard_deviation)
 
     return ((1 / sqrt(2 * M_PI * variance)) * exp(-((x - mean) * (x - mean))/(2 * variance)));
 }
-

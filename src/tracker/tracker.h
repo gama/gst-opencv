@@ -68,6 +68,7 @@ struct _Tracker
     CvSize          image_size;
     CClassifier    *classifier;
     CvPoint         previous_centroid;
+    gfloat          max_confidence;
 };
 
 Tracker*        tracker_new         (const CvRect *region,
