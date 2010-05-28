@@ -566,7 +566,6 @@ void associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects
                 #endif
 
                 dist = euclidian_distance(rect_centroid(detected_obj), cvPoint(tracker->filter->State[0], tracker->filter->State[1]));
-                GST_INFO("dist: %f", dist);
                 if (dist < min_dist)
                 {
                     min_dist = dist;
@@ -576,14 +575,14 @@ void associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects
         }
         if (min_dist <= dist_threshold && closer_tracker != NULL){
             GST_INFO("tracker found a detected_obj");
-            closer_tracker->detected_object = detected_obj;
+            *closer_tracker->detected_object = *detected_obj;
         }
         else if (detected_obj != NULL)
         {
             GST_INFO("adding CvRect(%d, %d, %d, %d) at unassociated_objects",
                                 detected_obj->x, detected_obj->y, detected_obj->width,
-                                detected_obj->height); *unassociated_objects =
-            g_slist_prepend(*unassociated_objects, detected_obj);
+                                detected_obj->height); 
+            *unassociated_objects = g_slist_prepend(*unassociated_objects, detected_obj);
         }
     }
 }
@@ -766,7 +765,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     gfloat mi   = 0.2;
 
 
-    guint  num_particles = 100;
+    guint  num_particles = 70;
 
     filter = GST_TRACKER(GST_OBJECT_PARENT(pad));
     filter->image->imageData = (char *) GST_BUFFER_DATA(buf);
@@ -781,6 +780,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
         GST_INFO("detected_objects: %d", g_slist_length(filter->detected_objects));
         // data association
         associate_detected_obj_to_tracker(image, filter->detected_objects, filter->trackers, &unassociated_objects);
+
         GST_INFO("unassociated_objects: %d", g_slist_length(unassociated_objects));
 
         // creating tracker for new detected object
@@ -814,6 +814,12 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
         }
 
         //TODO: review unassociated_objects list memory manage
+        /*
+        for (it_obj = unassociated_objects; it_obj; it_obj = it_obj->next) {
+            GST_INFO("free unassociated_object");
+            g_free((CvRect*)it_obj->data);
+        }
+        */
         g_slist_free(unassociated_objects);
     }
 
@@ -821,12 +827,12 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     GST_INFO("trackers: %d\n", g_slist_length(filter->trackers));
     id_tracker = 1;
     for (it_tracker = filter->trackers; it_tracker; it_tracker = it_tracker->next) {
-        //GST_INFO("running tracker.");
         tracker = (Tracker*)it_tracker->data;
+
+        print_tracker(tracker, filter->image, it_tracker);
 
         closer_tracker = closer_tracker_with_a_detected_obj_to( tracker, filter->trackers );
         tracker_run(tracker, closer_tracker, &filter->confidence_density, image );
-        print_tracker(tracker, filter->image, it_tracker);
         id_tracker++;
     }
 

@@ -91,11 +91,11 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
 
     // coord x
     cvmSet(lowerBound, 0, 0, 0.0);
-    cvmSet(upperBound, 0, 0, tracker->image_size.width);
+    cvmSet(upperBound, 0, 0, tracker->image_size.width*0.1);
 
     // coord y
     cvmSet(lowerBound, 1, 0, 0.0);
-    cvmSet(upperBound, 1, 0, tracker->image_size.height);
+    cvmSet(upperBound, 1, 0, tracker->image_size.height*0.1);
 
     // x speed (dx/dt)
     cvmSet(lowerBound, 2, 0, 0.0);
@@ -106,16 +106,16 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
     cvmSet(upperBound, 3, 0, 1.0);
 
     // update model (dynamic model)
-    // M = [1,0,1,0;
-    //      0,1,0,1;
-    //      0,0,1,0;
-    //      0,0,0,1]
+    // M = | 1 0 1 0 | |   x   |   | x + dx/dt |
+    //     | 0 1 0 1 | |   y   | = | y + dy/dt |
+    //     | 0 0 1 0 | | dx/dt |   |   dx/dt   |
+    //     | 0 0 0 1 | | dy/dt |   |   dy/dt   |
     tracker->filter->DynamMatr[ 0] = 1; tracker->filter->DynamMatr[ 1] = 0; tracker->filter->DynamMatr[2] =  1; tracker->filter->DynamMatr[ 3] = 0;
     tracker->filter->DynamMatr[ 4] = 0; tracker->filter->DynamMatr[ 5] = 1; tracker->filter->DynamMatr[6] =  0; tracker->filter->DynamMatr[ 7] = 1;
     tracker->filter->DynamMatr[ 8] = 0; tracker->filter->DynamMatr[ 9] = 0; tracker->filter->DynamMatr[10] = 1; tracker->filter->DynamMatr[11] = 0;
     tracker->filter->DynamMatr[12] = 0; tracker->filter->DynamMatr[13] = 0; tracker->filter->DynamMatr[14] = 0; tracker->filter->DynamMatr[15] = 1;
 
-    cvConDensInitSampleSet(tracker->filter, lowerBound, upperBound);
+//    cvConDensInitSampleSet(tracker->filter, lowerBound, upperBound);
 
     rng_state = cvRNG(0xffffffff);
 
@@ -144,6 +144,9 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
 
     #endif
 
+    tracker->filter->State[0] = mean.x;
+    tracker->filter->State[1] = mean.y;
+
     tracker->max_confidence = 0;
     for (i = 0; i < num_particles; ++i) {
         pos = *(CvPoint*)cvPtr1D(particle_positions, i, 0);
@@ -155,7 +158,6 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
     }
 
     // init learn process
-    GST_INFO("Initial training...");
     tracker->classifier = classifier_intermediate_init(image, *tracker->detected_object);
 
     cvReleaseMat(&particle_positions);
@@ -192,13 +194,13 @@ tracker_run(Tracker *tracker, Tracker *closer_tracker_with_a_detected_obj, CvMat
         // FIXME: use the return of function
         classifier_intermediate_train(tracker->classifier, image, *tracker->detected_object);
 
-        new_area = (float)tracker->detected_object->width * tracker->detected_object->height;
-        old_area = (float)tracker->tracker_area.width * tracker->tracker_area.height;
+        new_area = (float)(tracker->detected_object->width * tracker->detected_object->height);
+        old_area = (float)(tracker->tracker_area.width * tracker->tracker_area.height);
 
         ratio = abs(new_area-old_area)/old_area;
 
-        printf("new_area: %f, old_area: %f, ratio: %f\n", new_area, old_area, ratio);
-        if ( ratio <= 0.2 )
+        //printf("%f\n", ratio);
+        if ( ratio <= 0.6 )
             tracker->tracker_area = *tracker->detected_object;
 
     }
@@ -283,7 +285,7 @@ tracker_resample(Tracker *tracker, CvMat *confidence_density, IplImage *image, g
 
             tracker->filter->flConfidence[i] = tracker->beta * likelihood +
                                                tracker->gamma * po * confidence_density_term +
-                                               tracker->mi   * ctr
+                                               tracker->mi   * ctr;
             if (min_confidence > tracker->filter->flConfidence[i])
                min_confidence = tracker->filter->flConfidence[i];
             if (tracker->max_confidence < tracker->filter->flConfidence[i])
