@@ -106,4 +106,8 @@ double   linear_projection          (const double   min_real,
                                      const double   max_projected,
                                      const double   known_projected_value);
 
+void     print_rect                 (IplImage      *image,
+                                     CvRect         rect,
+                                     int            thickness);
+
 #endif

@@ -319,3 +319,65 @@ gaussian_function(gfloat x, gfloat mean, gfloat standard_deviation)
 
     return ((1 / sqrt(2 * M_PI * variance)) * exp(-((x - mean) * (x - mean))/(2 * variance)));
 }
+
+float
+dist_point_segment(gfloat x, gfloat y, gfloat x1, gfloat y1, gfloat x2, gfloat y2)
+{
+    gfloat A = x - x1;
+    gfloat B = y - y1;
+    gfloat C = x2 - x1;
+    gfloat D = y2 - y1;
+
+    gfloat dot = A * C + B * D;
+    gfloat len_sq = C * C + D * D;
+    gfloat param = dot / len_sq;
+
+    gfloat xx, yy;
+
+    if (param < 0) {
+        xx = x1;
+        yy = y1;
+    } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+    } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+    }
+
+    return sqrt(((x - xx) * (x - xx)) + ((y - yy) * (y - yy)));
+}
+
+gfloat
+get_inner_angle_b(CvPoint a, CvPoint b, CvPoint c)
+{
+    gfloat coef_ang_ba, ang_ba, ang_ba_left, ang_ba_right;
+    gfloat coef_ang_bc, ang_bc, ang_bc_left, ang_bc_right;
+    gfloat temp, result;
+
+    if((a.x == b.x && a.y == b.y) || (a.x == c.x && a.y == c.y) || (c.x == b.x && c.y == b.y))
+        return 0;
+
+    coef_ang_ba = (gfloat) (a.y - b.y) / (a.x - b.x);
+    ang_ba = (atan(coef_ang_ba)*(180 / M_PI));
+    ang_ba_left = (ang_ba > 0) ? ang_ba : ang_ba + 180;
+    ang_ba_right = 180 - ang_ba_left;
+
+    coef_ang_bc = (gfloat) (c.y - b.y) / (c.x - b.x);
+    ang_bc = (atan(coef_ang_bc)*(180 / M_PI));
+    ang_bc_right = (ang_bc > 0) ? ang_bc : ang_bc + 180;
+    ang_bc_left = 180 - ang_bc_right;
+
+    if ((b.y > a.y && b.y > c.y) || (b.y < a.y && b.y < c.y)) {
+        temp = abs(ang_ba_left - ang_bc_right);
+        result = ((180-temp) < temp)? temp = (180-temp) : temp;
+    } else if (b.y > c.y) {
+        result = (ang_bc_right + ang_ba_left < ang_bc_left + ang_ba_right) ? ang_bc_right + ang_ba_left : ang_bc_left + ang_ba_right;
+    } else if (b.y == c.y && b.y == a.y && ((a.x >= b.x && a.x <= c.x) || (c.x >= b.x && c.x <= a.x))) {
+        result = (ang_ba_left < ang_ba_right)? ang_ba_left : ang_ba_right;
+    } else {
+        result = (ang_bc_left + ang_ba_left < ang_bc_right + ang_ba_right) ? ang_bc_left + ang_ba_left : ang_bc_right + ang_ba_right;
+    }
+
+    return abs(result);
+}

@@ -456,133 +456,176 @@ typedef struct {
     guint count;
 } unassociated_obj_t;
 
-float dist_calc(CvPoint p1, CvPoint p2)
+
+/* The greedy algorithm */
+static void
+associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSList *trackers, GSList **unassociated_objects)
 {
-    return sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2));
-}
-
-float dist_point_to_segment(float x, float y, float x1, float y1, float x2, float y2)
-{
-    float A = x - x1;
-    float B = y - y1;
-    float C = x2 - x1;
-    float D = y2 - y1;
-
-    float dot = A * C + B * D;
-    float len_sq = C * C + D * D;
-    float param = dot / len_sq;
-
-    float xx, yy;
-
-    if (param < 0) {
-        xx = x1;
-        yy = y1;
-    } else if (param > 1) {
-        xx = x2;
-        yy = y2;
-    } else {
-        xx = x1 + param * C;
-        yy = y1 + param * D;
-    }
-
-    return sqrt(((x - xx) * (x - xx)) + ((y - yy) * (y - yy)));
-}
-
-// FIXME implement the greedy algorithm
-void associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSList *trackers, GSList **unassociated_objects)
-{
-    Tracker *closer_tracker, *tracker;
-    gfloat min_dist, dist;
-    CvRect *detected_obj;
     GSList *it_detected_obj, *it_tracker;
-    gfloat dist_threshold;
+    Tracker *tracker;
+    CvRect *detected_obj;
+    guint it_d, it_tr;
+    gfloat results_array[g_slist_length(detected_objects)][g_slist_length(trackers)];
+    guint remain_d[g_slist_length(detected_objects)];
+    guint size_tr, size_d;
 
-    // FIXME: select other threshold
-    dist_threshold = 200.0;
-
-    min_dist = G_MAXFLOAT;
-    closer_tracker = NULL;
     *unassociated_objects = NULL;
+    size_d = g_slist_length(detected_objects);
+    size_tr = g_slist_length(trackers);
 
+    // Init the remain detected objects vector
+    for (it_d = 0; it_d < size_d; ++it_d)
+        remain_d[it_d] = 1;
 
-    GST_INFO("detected_objects: %d\n", g_slist_length(detected_objects));
-    for (it_detected_obj = detected_objects; it_detected_obj; it_detected_obj = it_detected_obj->next) {
-        detected_obj = (CvRect*)it_detected_obj->data;
+    GST_INFO("detected_objects: %d, trackers: %d\n", size_d, size_tr);
 
-        for (it_tracker = trackers; it_tracker; it_tracker = it_tracker->next) 
-        {
-            tracker = (Tracker*)it_tracker->data;
-            if (tracker != NULL)
-            {
+    // If exist any tracker
+    if (size_tr) {
 
-                #if 0
-                //-------------------
+        // Init the greedy pairs array
+        for (it_d = 0; it_d < size_d; ++it_d) {
+            for (it_tr = 0; it_tr < size_tr; ++it_tr) {
+                results_array[it_d][it_tr] = -1;
+            }
+        }
 
-                gfloat part_a, part_b, part_c;
-                CvPoint rect_centroid_d = rect_centroid(detected_obj);
+        it_d = 0;
+        for (it_detected_obj = detected_objects; it_detected_obj; it_detected_obj = it_detected_obj->next) {
+            CvPoint rect_centroid_d;
+            detected_obj = (CvRect*) it_detected_obj->data;
+            rect_centroid_d = rect_centroid(detected_obj);
 
+            it_tr = 0;
+            for (it_tracker = trackers; it_tracker; it_tracker = it_tracker->next) {
+                gfloat part_a, part_b, part_c, result;
+                tracker = (Tracker*) it_tracker->data;
 
-                // PART A
+                // FIXME: clean the bad trackers
+                if ((tracker == NULL) || (tracker->tracker_area.x < 0 || tracker->tracker_area.y < 0))
+                    continue;
+
+                // PART A: probability according to size and placement
                 {
-                    gfloat area_tr = tracker->tracker_area.height * tracker->tracker_area.width;
-                    gfloat area_d = detected_obj->height * detected_obj->width;
-                    CvPoint rect_centroid_tr = rect_centroid(&tracker->tracker_area);
+                    gfloat area_proportion, area_tr, area_d;
+                    gfloat dist_tr_ini_to_end, dist_tr_end_to_d, dist_max;
+                    CvPoint rect_centroid_tr;
 
-                    // mean = 0, variance = 0.4
-                    part_a = gaussian_function((gfloat) ((area_tr - area_d) / area_tr), 0, 0.4);
+                    // Area proportion
+                    area_tr = tracker->tracker_area.height * tracker->tracker_area.width;
+                    area_d = detected_obj->height * detected_obj->width;
+                    area_proportion = gaussian_function((gfloat) ((area_tr - area_d) / area_tr), 0, 0.4);
 
-                    gfloat dist_temp = abs(dist_calc(rect_centroid_tr, rect_centroid_d));
+                    // Distanciamento entre os objetos
+                    dist_max = euclidian_distance(cvPoint(0, 0), cvPoint(image->width, image->height));
+                    rect_centroid_tr = rect_centroid(&tracker->tracker_area);
+                    dist_tr_ini_to_end = 1 - (euclidian_distance(rect_centroid_tr, tracker->previous_centroid) / dist_max);
+                    dist_tr_end_to_d = 1 - (euclidian_distance(rect_centroid_tr, rect_centroid_d) / dist_max);
 
-                    const gfloat threshold_dist = 20;
-                    if (dist_temp > threshold_dist)
-                        dist_temp = dist_point_to_segment(rect_centroid_d.x, rect_centroid_d.y, rect_centroid_tr.x, rect_centroid_tr.y,
-                            tracker->previous_centroid.x, tracker->previous_centroid.y);
-
-                    // mean = 25, variance = 5
-                    part_a *= gaussian_function(dist_temp, 25, 5);
-                }
-
-
-                // PART B
-                part_b = classifier_intermediate_classify(tracker->classifier, image, tracker->tracker_area);
-
-
-                // PART C
-                {
-                    part_c = 0;
-                    int i;
-                    gfloat particles_dist_to_d;
-                    for (i = 0; i < tracker->filter->SamplesNum; ++i) {
-                        particles_dist_to_d = abs(dist_calc(rect_centroid_d, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1])));
-                        part_c += gaussian_function(particles_dist_to_d, 110, 57);
+                    // If the tracker displacement greater than threshold that identifies the motion object
+                    if (dist_tr_ini_to_end > 0.95) {
+                        // Radial decay (stationary)
+                        part_a = area_proportion * dist_tr_end_to_d;
+                    } else {
+                        // Cone decay (moving)
+                        gfloat angle, dist_tr_vet_to_d;
+                        angle = (180 - get_inner_angle_b(rect_centroid_tr, tracker->previous_centroid, rect_centroid_d)) / 180;
+                        dist_tr_vet_to_d = 1 - (dist_point_segment(rect_centroid_d.x, rect_centroid_d.y, tracker->previous_centroid.x, tracker->previous_centroid.y, rect_centroid_tr.x, rect_centroid_tr.y) / dist_max);
+                        part_a = area_proportion * ((angle + dist_tr_end_to_d + dist_tr_vet_to_d) / 3);
                     }
                 }
 
-
-                gfloat result = part_a * (part_b*10 + part_c);
-                printf("A:%5.3f B:%5.3f C:%5.3f RESULT:%5.3f\n", part_a, part_b, part_c, result);
-
-                //---------------------------
-                #endif
-
-                dist = euclidian_distance(rect_centroid(detected_obj), cvPoint(tracker->filter->State[0], tracker->filter->State[1]));
-                if (dist < min_dist)
+                // PART B: probability according to similarity
                 {
-                    min_dist = dist;
-                    closer_tracker = tracker;
+                    part_b = classifier_intermediate_classify(tracker->classifier, image, *detected_obj);
+                    part_b = (part_b < 0) ? 0 : (part_b + 30) / 60;
+                    part_b = pow(part_b, 4);
+                }
+
+                // PART C: probability according to the concentration of particles
+                {
+                    int i;
+                    gfloat mean, standard_deviation;
+
+                    mean = standard_deviation = part_c = 0;
+
+                    for (i = 0; i < tracker->filter->SamplesNum; ++i)
+                        mean += abs(euclidian_distance(rect_centroid_d, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1])));
+                    mean /= tracker->filter->SamplesNum;
+
+                    for (i = 0; i < tracker->filter->SamplesNum; ++i)
+                        standard_deviation += pow((abs(euclidian_distance(rect_centroid_d, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]))) - mean), 2);
+                    standard_deviation /= tracker->filter->SamplesNum;
+                    standard_deviation = sqrt(standard_deviation);
+
+                    for (i = 0; i < tracker->filter->SamplesNum; ++i)
+                        part_c += gaussian_function(abs(euclidian_distance(rect_centroid_d, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]))), mean, standard_deviation);
+                }
+
+                result = part_a * ((part_b + part_c) / 2);
+                results_array[it_d][it_tr] = result;
+                GST_INFO("A:%5.3f B:%5.3f C:%5.3f RESULT:%5.3f\n", part_a, part_b, part_c, result);
+                it_tr++;
+            }
+            it_d++;
+        }
+
+        // Discards pairs with values irrelevant
+        const gfloat threshold_min_result = 0.3f;
+        for (it_d = 0; it_d < size_d; ++it_d) {
+            for (it_tr = 0; it_tr < size_tr; ++it_tr) {
+                if (results_array[it_d][it_tr] < threshold_min_result) {
+                    results_array[it_d][it_tr] = -1;
                 }
             }
         }
-        if (min_dist <= dist_threshold && closer_tracker != NULL){
-            GST_INFO("tracker found a detected_obj");
-            *closer_tracker->detected_object = *detected_obj;
+
+        // Include the detected objects with tr
+        for (;;) {
+
+            gfloat max_result;
+            guint it_d_max, it_tr_max;
+
+            //if(remain_tr == 0 || remain_d == 0) break;
+
+            it_d = it_tr = 0;
+            max_result = -1;
+
+            // Find the max result_value in array
+            for (it_d = 0; it_d < size_d; ++it_d) {
+                for (it_tr = 0; it_tr < size_tr; ++it_tr) {
+                    if (results_array[it_d][it_tr] > max_result) {
+                        max_result = results_array[it_d][it_tr];
+                        it_d_max = it_d;
+                        it_tr_max = it_tr;
+                    }
+                }
+            }
+
+            // If not exist any valid value, abort
+            if (max_result == -1) break;
+
+            // Add the detected object selected in tracker
+            detected_obj = (CvRect*) g_slist_nth_data(detected_objects, it_d_max);
+            tracker = (Tracker*) g_slist_nth_data(trackers, it_tr_max);
+            *tracker->detected_object = *detected_obj;
+            remain_d[it_d_max] = 0;
+
+            // Clean the row and column
+            for (it_tr = 0; it_tr < size_tr; ++it_tr)
+                results_array[it_d_max][it_tr] = -1;
+            for (it_d = 0; it_d < size_d; ++it_d)
+                results_array[it_d][it_tr_max] = -1;
         }
-        else if (detected_obj != NULL)
-        {
-            GST_INFO("adding CvRect(%d, %d, %d, %d) at unassociated_objects",
-                                detected_obj->x, detected_obj->y, detected_obj->width,
-                                detected_obj->height); 
+    }
+
+    // Include the detected object without tr in unassociated array
+    for (it_d = 0; it_d < size_d; ++it_d) {
+        if (remain_d[it_d]) {
+            detected_obj = (CvRect*) g_slist_nth_data(detected_objects, it_d);
             *unassociated_objects = g_slist_prepend(*unassociated_objects, detected_obj);
+            GST_INFO("adding CvRect(%d, %d, %d, %d) at unassociated_objects",
+                    detected_obj->x, detected_obj->y, detected_obj->width,
+                    detected_obj->height);
         }
     }
 }

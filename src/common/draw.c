@@ -301,3 +301,11 @@ linear_projection(const double min_real, const double min_projected,
     double p = (max_real - min_real) / (max_projected - min_projected);
     return ((known_projected_value - min_projected) * p)+min_real; // return 'real' value
 }
+
+void
+print_rect(IplImage *image, CvRect rect, int thickness)
+{
+    cvRectangle(image, cvPoint(rect.x, rect.y), cvPoint(rect.x + rect.width, rect.y + rect.height), CV_RGB(0, 0, 255), thickness, 8, 0);
+    cvLine(image, cvPoint(rect.x, rect.y), cvPoint(rect.x + rect.width, rect.y + rect.height), CV_RGB(0, 0, 255), thickness, 8, 0);
+    cvLine(image, cvPoint(rect.x + rect.width, rect.y), cvPoint(rect.x, rect.y + rect.height), CV_RGB(0, 0, 255), thickness, 8, 0);
+}

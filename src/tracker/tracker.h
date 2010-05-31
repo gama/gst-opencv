@@ -93,4 +93,15 @@ gfloat          gaussian_function   (gfloat        x,
                                      gfloat        mean,
                                      gfloat        standard_deviation);
 
+gfloat          dist_point_segment  (gfloat x,
+                                     gfloat y,
+                                     gfloat x1,
+                                     gfloat y1,
+                                     gfloat x2,
+                                     gfloat y2);
+
+gfloat          get_inner_angle_b   (CvPoint a,
+                                     CvPoint b,
+                                     CvPoint c);
+
 #endif // __GST_TRACKER_H__
