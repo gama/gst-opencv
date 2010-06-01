@@ -461,11 +461,13 @@ typedef struct {
 static void
 associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSList *trackers, GSList **unassociated_objects)
 {
+    const gfloat threshold_min_result = 0.3f;
     GSList *it_detected_obj, *it_tracker;
     Tracker *tracker;
     CvRect *detected_obj;
     guint it_d, it_tr;
     gfloat results_array[g_slist_length(detected_objects)][g_slist_length(trackers)];
+    gfloat partc_vet[g_slist_length(trackers)];
     guint remain_d[g_slist_length(detected_objects)];
     guint size_tr, size_d;
 
@@ -495,9 +497,64 @@ associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSL
             detected_obj = (CvRect*) it_detected_obj->data;
             rect_centroid_d = rect_centroid(detected_obj);
 
+            // PART C: probability according to the concentration of particles
+            {
+                gfloat max_partc;
+
+                max_partc = -1;
+                it_tr = 0;
+                for (it_tracker = trackers; it_tracker; it_tracker = it_tracker->next) {
+                    tracker = (Tracker*) it_tracker->data;
+                    {
+                        gint i, j, count_diff_particles;
+                        CvPoint vet_particles[tracker->filter->SamplesNum];
+
+                        // Cria o subconjunto de particulas diferentes entre si
+                        count_diff_particles = 0;
+                        for (i = 0; i < tracker->filter->SamplesNum; ++i) {
+                            CvPoint point_temp = cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]);
+
+                            for (j = 0; j < count_diff_particles; ++j)
+                                if (point_temp.x == vet_particles[j].x && point_temp.y == vet_particles[j].y) break;
+
+                            if (j >= count_diff_particles) {
+                                vet_particles[count_diff_particles] = point_temp;
+                                count_diff_particles++;
+                            }
+                        }
+
+                        if (count_diff_particles < 2) {
+                            partc_vet[it_tr] = 1;
+                        } else {
+                            gfloat mean, standard_deviation, part_c;
+
+                            mean = standard_deviation = part_c = 0;
+
+                            for (i = 0; i < count_diff_particles; ++i)
+                                mean += abs(euclidian_distance(rect_centroid_d, vet_particles[i]));
+                            mean /= count_diff_particles;
+
+                            for (i = 0; i < count_diff_particles; ++i)
+                                standard_deviation += pow((abs(euclidian_distance(rect_centroid_d, vet_particles[i])) - mean), 2);
+                            standard_deviation /= count_diff_particles;
+                            standard_deviation = sqrt(standard_deviation);
+
+                            for (i = 0; i < count_diff_particles; ++i)
+                                part_c += gaussian_function(abs(euclidian_distance(rect_centroid_d, vet_particles[i])), mean, standard_deviation);
+                            partc_vet[it_tr] = part_c;
+                            if (part_c > max_partc) max_partc = part_c;
+                        }
+
+                        // FIXME: apply alpha value (evaluate situation of only one particle)
+                        //for (it_tr = 0; it_tr < size_tr; partc_vet[it_tr++] /= max_partc);
+                    }
+                    it_tr++;
+                }
+            }
+
             it_tr = 0;
             for (it_tracker = trackers; it_tracker; it_tracker = it_tracker->next) {
-                gfloat part_a, part_b, part_c, result;
+                gfloat part_a, part_b, result;
                 tracker = (Tracker*) it_tracker->data;
 
                 // FIXME: clean the bad trackers
@@ -541,36 +598,15 @@ associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSL
                     part_b = pow(part_b, 4);
                 }
 
-                // PART C: probability according to the concentration of particles
-                {
-                    int i;
-                    gfloat mean, standard_deviation;
-
-                    mean = standard_deviation = part_c = 0;
-
-                    for (i = 0; i < tracker->filter->SamplesNum; ++i)
-                        mean += abs(euclidian_distance(rect_centroid_d, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1])));
-                    mean /= tracker->filter->SamplesNum;
-
-                    for (i = 0; i < tracker->filter->SamplesNum; ++i)
-                        standard_deviation += pow((abs(euclidian_distance(rect_centroid_d, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]))) - mean), 2);
-                    standard_deviation /= tracker->filter->SamplesNum;
-                    standard_deviation = sqrt(standard_deviation);
-
-                    for (i = 0; i < tracker->filter->SamplesNum; ++i)
-                        part_c += gaussian_function(abs(euclidian_distance(rect_centroid_d, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]))), mean, standard_deviation);
-                }
-
-                result = part_a * ((part_b + part_c) / 2);
+                result = part_a * ((part_b + partc_vet[it_tr]) / 2);
                 results_array[it_d][it_tr] = result;
-                GST_INFO("A:%5.3f B:%5.3f C:%5.3f RESULT:%5.3f\n", part_a, part_b, part_c, result);
+                GST_INFO("A:%5.3f B:%5.3f C:%5.3f RESULT:%5.3f\n", part_a, part_b, partc_vet[it_tr], result);
                 it_tr++;
             }
             it_d++;
         }
 
         // Discards pairs with values irrelevant
-        const gfloat threshold_min_result = 0.3f;
         for (it_d = 0; it_d < size_d; ++it_d) {
             for (it_tr = 0; it_tr < size_tr; ++it_tr) {
                 if (results_array[it_d][it_tr] < threshold_min_result) {
@@ -579,13 +615,11 @@ associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSL
             }
         }
 
-        // Include the detected objects with tr
+        // Find pairs and Rect updating (tracker->detected_object) of the associated objects
         for (;;) {
 
             gfloat max_result;
             guint it_d_max, it_tr_max;
-
-            //if(remain_tr == 0 || remain_d == 0) break;
 
             it_d = it_tr = 0;
             max_result = -1;
