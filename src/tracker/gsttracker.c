@@ -461,12 +461,12 @@ typedef struct {
 static void
 associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSList *trackers, GSList **unassociated_objects)
 {
-    const gfloat threshold_min_result = 0.3f;
+    const gfloat threshold_min_result = 0.4f;
     GSList *it_detected_obj, *it_tracker;
     Tracker *tracker;
     CvRect *detected_obj;
-    guint it_d, it_tr;
-    gfloat results_array[g_slist_length(detected_objects)][g_slist_length(trackers)];
+    guint it_d, it_tr, it_dxtr;
+    gfloat results_vet[g_slist_length(detected_objects)*g_slist_length(trackers)];
     gfloat partc_vet[g_slist_length(trackers)];
     guint remain_d[g_slist_length(detected_objects)];
     guint size_tr, size_d;
@@ -485,11 +485,8 @@ associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSL
     if (size_tr) {
 
         // Init the greedy pairs array
-        for (it_d = 0; it_d < size_d; ++it_d) {
-            for (it_tr = 0; it_tr < size_tr; ++it_tr) {
-                results_array[it_d][it_tr] = -1;
-            }
-        }
+        for (it_dxtr = 0; it_dxtr < size_d * size_tr; ++it_dxtr)
+            results_vet[it_dxtr] = -1;
 
         it_d = 0;
         for (it_detected_obj = detected_objects; it_detected_obj; it_detected_obj = it_detected_obj->next) {
@@ -523,8 +520,8 @@ associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSL
                             }
                         }
 
-                        if (count_diff_particles < 2) {
-                            partc_vet[it_tr] = 1;
+                        if (count_diff_particles <= 1) {
+                            partc_vet[it_tr] = -1;
                         } else {
                             gfloat mean, standard_deviation, part_c;
 
@@ -541,14 +538,18 @@ associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSL
 
                             for (i = 0; i < count_diff_particles; ++i)
                                 part_c += gaussian_function(abs(euclidian_distance(rect_centroid_d, vet_particles[i])), mean, standard_deviation);
+                            part_c /= count_diff_particles;
                             partc_vet[it_tr] = part_c;
                             if (part_c > max_partc) max_partc = part_c;
                         }
-
-                        // FIXME: apply alpha value (evaluate situation of only one particle)
-                        //for (it_tr = 0; it_tr < size_tr; partc_vet[it_tr++] /= max_partc);
                     }
                     it_tr++;
+                }
+
+                // FIXME: apply alpha value (evaluate situation of only one particle)
+                for (it_tr = 0; it_tr < size_tr; it_tr++) {
+                    if (partc_vet[it_tr] == -1) partc_vet[it_tr] = 1;
+                    else partc_vet[it_tr] /= max_partc;
                 }
             }
 
@@ -599,7 +600,7 @@ associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSL
                 }
 
                 result = part_a * ((part_b + partc_vet[it_tr]) / 2);
-                results_array[it_d][it_tr] = result;
+                results_vet[it_tr + (it_d * size_tr)] = result;
                 GST_INFO("A:%5.3f B:%5.3f C:%5.3f RESULT:%5.3f\n", part_a, part_b, partc_vet[it_tr], result);
                 it_tr++;
             }
@@ -607,13 +608,9 @@ associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSL
         }
 
         // Discards pairs with values irrelevant
-        for (it_d = 0; it_d < size_d; ++it_d) {
-            for (it_tr = 0; it_tr < size_tr; ++it_tr) {
-                if (results_array[it_d][it_tr] < threshold_min_result) {
-                    results_array[it_d][it_tr] = -1;
-                }
-            }
-        }
+        for (it_dxtr = 0; it_dxtr < size_d * size_tr; ++it_dxtr)
+            if (results_vet[it_dxtr] < threshold_min_result)
+                results_vet[it_dxtr] = -1;
 
         // Find pairs and Rect updating (tracker->detected_object) of the associated objects
         for (;;) {
@@ -621,19 +618,15 @@ associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSL
             gfloat max_result;
             guint it_d_max, it_tr_max;
 
-            it_d = it_tr = 0;
             max_result = -1;
 
             // Find the max result_value in array
-            for (it_d = 0; it_d < size_d; ++it_d) {
-                for (it_tr = 0; it_tr < size_tr; ++it_tr) {
-                    if (results_array[it_d][it_tr] > max_result) {
-                        max_result = results_array[it_d][it_tr];
-                        it_d_max = it_d;
-                        it_tr_max = it_tr;
-                    }
+            for (it_dxtr = 0; it_dxtr < size_d * size_tr; ++it_dxtr)
+                if (results_vet[it_dxtr] > max_result){
+                    max_result = results_vet[it_dxtr];
+                    it_d_max = (int) it_dxtr / size_tr;
+                    it_tr_max = it_dxtr - ((int) (it_d_max * size_tr));
                 }
-            }
 
             // If not exist any valid value, abort
             if (max_result == -1) break;
@@ -645,10 +638,13 @@ associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSL
             remain_d[it_d_max] = 0;
 
             // Clean the row and column
-            for (it_tr = 0; it_tr < size_tr; ++it_tr)
-                results_array[it_d_max][it_tr] = -1;
-            for (it_d = 0; it_d < size_d; ++it_d)
-                results_array[it_d][it_tr_max] = -1;
+            for (it_dxtr = 0; it_dxtr < size_d * size_tr; ++it_dxtr){
+                int it_d_temp, it_tr_temp;
+                it_d_temp = (int) it_dxtr / size_tr;
+                it_tr_temp = it_dxtr - ((int) (it_d_temp * size_tr));
+                if(it_d_temp == it_d_max || it_tr_temp == it_tr_max)
+                    results_vet[it_dxtr] = -1;
+            }
         }
     }
 
