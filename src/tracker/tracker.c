@@ -71,6 +71,7 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
     CvPoint2D32f    standard_deviation;
     CvPoint2D32f    mean;
     CvPoint         pos;
+    gfloat          vx, vy;
 
     // allocate tracker struct and initialize condensation filter
     tracker         = g_new0(Tracker, 1);
@@ -86,34 +87,36 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
 
     tracker->tracker_area = *region;
 
-    lowerBound = cvCreateMat(state_vec_dim, 1, CV_32F);
-    upperBound = cvCreateMat(state_vec_dim, 1, CV_32F);
+//    lowerBound = cvCreateMat(state_vec_dim, 1, CV_32F);
+//    upperBound = cvCreateMat(state_vec_dim, 1, CV_32F);
 
     // coord x
-    cvmSet(lowerBound, 0, 0, 0.0);
-    cvmSet(upperBound, 0, 0, tracker->image_size.width*0.1);
+//    cvmSet(lowerBound, 0, 0, 0.0);
+//    cvmSet(upperBound, 0, 0, tracker->image_size.width*0.1);
 
     // coord y
-    cvmSet(lowerBound, 1, 0, 0.0);
-    cvmSet(upperBound, 1, 0, tracker->image_size.height*0.1);
+//    cvmSet(lowerBound, 1, 0, 0.0);
+//    cvmSet(upperBound, 1, 0, tracker->image_size.height*0.1);
 
     // x speed (dx/dt)
-    cvmSet(lowerBound, 2, 0, 0.0);
-    cvmSet(upperBound, 2, 0, 1.0);
+//    cvmSet(lowerBound, 2, 0, 0.0);
+//    cvmSet(upperBound, 2, 0, 1.0);
 
     // y speed (dy/dt)
-    cvmSet(lowerBound, 3, 0, 0.0);
-    cvmSet(upperBound, 3, 0, 1.0);
+//    cvmSet(lowerBound, 3, 0, 0.0);
+//    cvmSet(upperBound, 3, 0, 1.0);
 
+    vx = 1;
+    vy = 1;
     // update model (dynamic model)
     // M = | 1 0 1 0 | |   x   |   | x + dx/dt |
     //     | 0 1 0 1 | |   y   | = | y + dy/dt |
     //     | 0 0 1 0 | | dx/dt |   |   dx/dt   |
     //     | 0 0 0 1 | | dy/dt |   |   dy/dt   |
-    tracker->filter->DynamMatr[ 0] = 1; tracker->filter->DynamMatr[ 1] = 0; tracker->filter->DynamMatr[2] =  1; tracker->filter->DynamMatr[ 3] = 0;
-    tracker->filter->DynamMatr[ 4] = 0; tracker->filter->DynamMatr[ 5] = 1; tracker->filter->DynamMatr[6] =  0; tracker->filter->DynamMatr[ 7] = 1;
-    tracker->filter->DynamMatr[ 8] = 0; tracker->filter->DynamMatr[ 9] = 0; tracker->filter->DynamMatr[10] = 1; tracker->filter->DynamMatr[11] = 0;
-    tracker->filter->DynamMatr[12] = 0; tracker->filter->DynamMatr[13] = 0; tracker->filter->DynamMatr[14] = 0; tracker->filter->DynamMatr[15] = 1;
+    tracker->filter->DynamMatr[ 0] = 1; tracker->filter->DynamMatr[ 1] = 0; tracker->filter->DynamMatr[2] =  vx; tracker->filter->DynamMatr[ 3] = 0;
+    tracker->filter->DynamMatr[ 4] = 0; tracker->filter->DynamMatr[ 5] = 1; tracker->filter->DynamMatr[6] =  0; tracker->filter->DynamMatr[ 7] = vy;
+    tracker->filter->DynamMatr[ 8] = 0; tracker->filter->DynamMatr[ 9] = 0; tracker->filter->DynamMatr[10] = 1.1; tracker->filter->DynamMatr[11] = 0;
+    tracker->filter->DynamMatr[12] = 0; tracker->filter->DynamMatr[13] = 0; tracker->filter->DynamMatr[14] = 0; tracker->filter->DynamMatr[15] = 1.1;
 
 //    cvConDensInitSampleSet(tracker->filter, lowerBound, upperBound);
 
@@ -127,8 +130,8 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
                         (float)(tracker->detected_object->height)/2.0 + tracker->detected_object->y);
 
     // 3*sigma ~ 99.7% of particles inside of rectangle
-    standard_deviation = cvPoint2D32f(  ((float)(tracker->detected_object->width)/2.0)/3.0,                                         
-                                        ((float)(tracker->detected_object->height)/2.0)/3.0); 
+    standard_deviation = cvPoint2D32f(  ((float)(tracker->detected_object->width)/1.5)/3.0,
+                                        ((float)(tracker->detected_object->height)/1.5)/3.0);
     #if 1
     // normal distribution
     cvRandArr(&rng_state, particle_positions, CV_RAND_NORMAL,
@@ -137,21 +140,26 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
               );
     #else
     // uniforme distribution
-    cvRandArr(&rng_state, particle_positions, CV_RAND_UNI, 
-                cvScalar(tracker->detected_object->x, tracker->detected_object->y, 0, 0), 
-                cvScalar(   tracker->detected_object->x + tracker->detected_object->width, 
+    cvRandArr(&rng_state, particle_positions, CV_RAND_UNI,
+                cvScalar(tracker->detected_object->x, tracker->detected_object->y, 0, 0),
+                cvScalar(   tracker->detected_object->x + tracker->detected_object->width,
                             tracker->detected_object->y + tracker->detected_object->height, 0, 0));
 
     #endif
 
     tracker->filter->State[0] = mean.x;
     tracker->filter->State[1] = mean.y;
+    tracker->filter->State[2] = 1;
+    tracker->filter->State[3] = 1;
 
     tracker->max_confidence = 0;
     for (i = 0; i < num_particles; ++i) {
         pos = *(CvPoint*)cvPtr1D(particle_positions, i, 0);
         tracker->filter->flSamples[i][0] = pos.x;  //0 -> x coord
         tracker->filter->flSamples[i][1] = pos.y; //1 -> y coord
+
+
+        //tracker->filter->flConfidence[i] = 1/euclidian_distance( pos, cvPoint(mean.x, mean.y) );
 
         if (tracker->max_confidence < tracker->filter->flConfidence[i])
            tracker->max_confidence = tracker->filter->flConfidence[i];
@@ -161,8 +169,8 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
     tracker->classifier = classifier_intermediate_init(image, *tracker->detected_object);
 
     cvReleaseMat(&particle_positions);
-    cvReleaseMat(&lowerBound);
-    cvReleaseMat(&upperBound);
+//    cvReleaseMat(&lowerBound);
+//    cvReleaseMat(&upperBound);
 
     return tracker;
 }

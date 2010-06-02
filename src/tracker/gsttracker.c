@@ -842,7 +842,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     gfloat mi   = 0.2;
 
 
-    guint  num_particles = 70;
+    guint  num_particles = 100;
 
     filter = GST_TRACKER(GST_OBJECT_PARENT(pad));
     filter->image->imageData = (char *) GST_BUFFER_DATA(buf);
