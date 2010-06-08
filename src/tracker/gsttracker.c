@@ -79,9 +79,12 @@ GST_DEBUG_CATEGORY_STATIC(gst_tracker_debug);
 static const float F[] = { 1, 1, 0, 1 };
 
 #define DEFAULT_MAX_POINTS         500
-#define DEFAULT_MIN_POINTS          20
 #define DEFAULT_WIN_SIZE            10
-#define DEFAULT_MOVEMENT_THRESHOLD   2.0
+
+#define DEFAULT_DETECTION_PARAMETER         1.0
+#define DEFAULT_DET_CONFIDENCE_PARAMETER    0.50
+#define DEFAULT_CLASSIFIER_PARAMETER        0.25
+
 
 #define DEFAULT_STATE_DIM           4
 #define DEFAULT_MEASUREMENT_DIM     4
@@ -105,17 +108,14 @@ static const float F[] = { 1, 1, 0, 1 };
 enum {
     PROP_0,
     PROP_VERBOSE,
-    PROP_MAX_POINTS,
-    PROP_MIN_POINTS,
     PROP_WIN_SIZE,
-    PROP_MOVEMENT_THRESHOLD,
     PROP_SHOW_PARTICLES,
-    PROP_SHOW_FEATURES,
+    PROP_DETECTION_PARAMETER,
+    PROP_DET_CONFIDENCE_PARAMETER,
+    PROP_CLASSIFIER_PARAMETER,
     PROP_SHOW_FEATURES_BOX,
-    PROP_SHOW_BORDERS,
     PROP_SAMPLE_SIZE,
-    PROP_FRAMES_LEARN_BG,
-    PROP_TRACKER_BY_MOTION
+    PROP_FRAMES_LEARN_BG
 };
 
 
@@ -153,9 +153,6 @@ gst_tracker_finalize(GObject * obj)
     if (filter->prev_grey)    cvReleaseImage(&filter->image);
     if (filter->pyramid)      cvReleaseImage(&filter->image);
     if (filter->prev_pyramid) cvReleaseImage(&filter->image);
-    if (filter->points[0])    cvFree(&filter->points[0]);
-    if (filter->points[1])    cvFree(&filter->points[1]);
-    if (filter->status)       cvFree(&filter->status);
     if (filter->verbose)      g_print("\n");
 
     if (filter->background)         cvReleaseImage(&filter->background);
@@ -195,10 +192,6 @@ gst_tracker_class_init(GstTrackerClass * klass)
     gobject_class->set_property = gst_tracker_set_property;
     gobject_class->get_property = gst_tracker_get_property;
 
-    g_object_class_install_property(gobject_class, PROP_TRACKER_BY_MOTION,
-                                    g_param_spec_boolean("tracker-by-motion", "Tracker by motion", "Amendment application to track moving object, instead of subtracting background.",
-                                                         TRUE, G_PARAM_READWRITE));
-
     g_object_class_install_property(gobject_class, PROP_VERBOSE,
                                     g_param_spec_boolean("verbose", "Verbose", "Sets whether the movement direction should be printed to the standard output.",
                                                          FALSE, G_PARAM_READWRITE));
@@ -207,34 +200,26 @@ gst_tracker_class_init(GstTrackerClass * klass)
                                     g_param_spec_boolean("show-particles", "Show particles", "Sets whether particles location should be printed to the video.",
                                                          FALSE, G_PARAM_READWRITE));
 
-    g_object_class_install_property(gobject_class, PROP_SHOW_FEATURES,
-                                    g_param_spec_boolean("show-features", "Show features", "Sets whether features location should be printed to the video.",
-                                                         FALSE, G_PARAM_READWRITE));
-
     g_object_class_install_property(gobject_class, PROP_SHOW_FEATURES_BOX,
                                     g_param_spec_boolean("show-features-box", "Show features box", "Sets whether features box should be printed to the video.",
                                                          FALSE, G_PARAM_READWRITE));
-
-    g_object_class_install_property(gobject_class, PROP_SHOW_BORDERS,
-                                    g_param_spec_boolean("show-borders", "Show borders in features box", "Sets whether borders in features box should be printed to the video.",
-                                                         TRUE, G_PARAM_READWRITE));
-
-    g_object_class_install_property(gobject_class, PROP_MAX_POINTS,
-                                    g_param_spec_uint("max-points", "Max points", "Maximum number of feature points.",
-                                                      0, 2 * DEFAULT_MAX_POINTS, DEFAULT_MAX_POINTS, G_PARAM_READWRITE));
-
-    g_object_class_install_property(gobject_class, PROP_MIN_POINTS,
-                                    g_param_spec_uint("min-points", "Min points", "Minimum number of feature points accepted. If the number of points falls belows this threshold, another feature-selection is attempted",
-                                                      0, DEFAULT_MAX_POINTS, DEFAULT_MIN_POINTS, G_PARAM_READWRITE));
 
     g_object_class_install_property(gobject_class, PROP_WIN_SIZE,
                                     g_param_spec_uint("win-size", "Window size", "Size of the corner-subpixels window.",
                                                       0, 2 * DEFAULT_WIN_SIZE, DEFAULT_WIN_SIZE, G_PARAM_READWRITE));
 
-    g_object_class_install_property(gobject_class, PROP_MOVEMENT_THRESHOLD,
-                                    g_param_spec_float("movement-threshold", "Movement threshold", "Threshold that defines what constitutes a left (< -THRESHOLD) or right (> THRESHOLD) movement (in average # of pixels).",
-                                                       0.0, 20 * DEFAULT_MOVEMENT_THRESHOLD, DEFAULT_MOVEMENT_THRESHOLD, G_PARAM_READWRITE));
+    g_object_class_install_property(gobject_class, PROP_DETECTION_PARAMETER,
+                                    g_param_spec_float("detection-influence", "Detection Parameter (beta)", "How much hog detector influences in particle update (beta parameter in Breitenstein paper).",
+                                                       0.0, 20 * DEFAULT_DETECTION_PARAMETER, DEFAULT_DETECTION_PARAMETER, G_PARAM_READWRITE));
 
+    g_object_class_install_property(gobject_class, PROP_DET_CONFIDENCE_PARAMETER,
+                                    g_param_spec_float("confidence-influence", "Detector Confidence Parameter (gamma)", "How much confidence map of hog detectior influences in particle update (gamma parameter in Breitenstein paper).",
+                                                       0.0, 20 * DEFAULT_DET_CONFIDENCE_PARAMETER, DEFAULT_DET_CONFIDENCE_PARAMETER, G_PARAM_READWRITE));
+
+    g_object_class_install_property(gobject_class, PROP_CLASSIFIER_PARAMETER,
+                                    g_param_spec_float("classifier-influence", "Classifier Parameter (eta)", "How much classifier influences in particle update (eta parameter in Breitenstein paper).",
+                                                       0.0, 20 * DEFAULT_CLASSIFIER_PARAMETER, DEFAULT_CLASSIFIER_PARAMETER, G_PARAM_READWRITE));
+    
     g_object_class_install_property(gobject_class, PROP_SAMPLE_SIZE,
                                     g_param_spec_uint("sample-size", "Sample size", "Number of particles used in Condensation", 0, DEFAULT_MAX_SAMPLE_SIZE, DEFAULT_SAMPLE_SIZE, G_PARAM_READWRITE));
 
@@ -270,18 +255,16 @@ gst_tracker_init(GstTracker * filter, GstTrackerClass * gclass)
     // set default properties
     filter->verbose            = FALSE;
     filter->show_particles     = FALSE;
-    filter->show_features      = FALSE;
     filter->show_features_box  = FALSE;
-    filter->show_borders       = TRUE;
-    filter->max_points         = DEFAULT_MAX_POINTS;
-    filter->min_points         = DEFAULT_MIN_POINTS;
     filter->win_size           = DEFAULT_WIN_SIZE;
-    filter->movement_threshold = DEFAULT_MOVEMENT_THRESHOLD;
-    filter->tracker_by_motion  = TRUE;
 
     filter->state_dim          = DEFAULT_STATE_DIM;
     filter->measurement_dim    = DEFAULT_MEASUREMENT_DIM;
     filter->sample_size        = DEFAULT_SAMPLE_SIZE;
+
+    filter->beta               = DEFAULT_DETECTION_PARAMETER;
+    filter->gamma              = DEFAULT_DET_CONFIDENCE_PARAMETER;
+    filter->eta                = DEFAULT_CLASSIFIER_PARAMETER;
 
     filter->nframesToLearnBG   = DEFAULT_FRAMES_LEARN_BG;
     filter->framesProcessed    = 0;
@@ -309,35 +292,26 @@ gst_tracker_set_property(GObject *object, guint prop_id,
     GstTracker *filter = GST_TRACKER(object);
 
     switch (prop_id) {
-        case PROP_TRACKER_BY_MOTION:
-            filter->tracker_by_motion = g_value_get_boolean(value);
-            break;
         case PROP_VERBOSE:
             filter->verbose = g_value_get_boolean(value);
-            break;
-        case PROP_MAX_POINTS:
-            filter->max_points = g_value_get_uint(value);
-            break;
-        case PROP_MIN_POINTS:
-            filter->min_points = g_value_get_uint(value);
             break;
         case PROP_WIN_SIZE:
             filter->win_size = g_value_get_uint(value);
             break;
-        case PROP_MOVEMENT_THRESHOLD:
-            filter->win_size = g_value_get_float(value);
+        case PROP_DETECTION_PARAMETER:
+            filter->beta = g_value_get_float(value);
+            break;
+        case PROP_DET_CONFIDENCE_PARAMETER:
+            filter->gamma = g_value_get_float(value);
+            break;
+        case PROP_CLASSIFIER_PARAMETER:
+            filter->eta = g_value_get_float(value);
             break;
         case PROP_SHOW_PARTICLES:
             filter->show_particles = g_value_get_boolean(value);
             break;
-        case PROP_SHOW_FEATURES:
-            filter->show_features = g_value_get_boolean(value);
-            break;
         case PROP_SHOW_FEATURES_BOX:
             filter->show_features_box = g_value_get_boolean(value);
-            break;
-        case PROP_SHOW_BORDERS:
-            filter->show_borders = g_value_get_boolean(value);
             break;
         case PROP_SAMPLE_SIZE:
             filter->sample_size = g_value_get_uint(value);
@@ -358,35 +332,26 @@ gst_tracker_get_property(GObject * object, guint prop_id,
     GstTracker *filter = GST_TRACKER(object);
 
     switch (prop_id) {
-        case PROP_TRACKER_BY_MOTION:
-            g_value_set_boolean(value, filter->tracker_by_motion);
-            break;
         case PROP_VERBOSE:
             g_value_set_boolean(value, filter->verbose);
-            break;
-        case PROP_MAX_POINTS:
-            g_value_set_uint(value, filter->max_points);
-            break;
-        case PROP_MIN_POINTS:
-            g_value_set_uint(value, filter->min_points);
             break;
         case PROP_WIN_SIZE:
             g_value_set_uint(value, filter->win_size);
             break;
-        case PROP_MOVEMENT_THRESHOLD:
-            g_value_set_float(value, filter->movement_threshold);
+        case PROP_DETECTION_PARAMETER:
+            g_value_set_float(value, filter->beta);
+            break;
+        case PROP_DET_CONFIDENCE_PARAMETER:
+            g_value_set_float(value, filter->gamma);
+            break;
+        case PROP_CLASSIFIER_PARAMETER:
+            g_value_set_float(value, filter->eta);
             break;
         case PROP_SHOW_PARTICLES:
             g_value_set_boolean(value, filter->show_particles);
             break;
-        case PROP_SHOW_FEATURES:
-            g_value_set_boolean(value, filter->show_features);
-            break;
         case PROP_SHOW_FEATURES_BOX:
             g_value_set_boolean(value, filter->show_features_box);
-            break;
-        case PROP_SHOW_BORDERS:
-            g_value_set_boolean(value, filter->show_borders);
             break;
         case PROP_SAMPLE_SIZE:
             g_value_set_uint(value, filter->sample_size);
@@ -426,9 +391,6 @@ gst_tracker_set_caps(GstPad * pad, GstCaps * caps)
     filter->pyramid       = cvCreateImage(cvSize(width, height), 8, 1);
     filter->prev_pyramid  = cvCreateImage(cvSize(width, height), 8, 1);
     filter->cvMotion      = cvCreateImage(cvSize(width, height), 8, 1);
-    filter->points[0]     = (CvPoint2D32f*) cvAlloc(filter->max_points * sizeof(filter->points[0][0]));
-    filter->points[1]     = (CvPoint2D32f*) cvAlloc(filter->max_points * sizeof(filter->points[0][0]));
-    filter->status        = (char*) cvAlloc(filter->max_points);
     filter->flags         = 0;
     filter->initialized   = FALSE;
 
@@ -448,7 +410,7 @@ gst_tracker_set_caps(GstPad * pad, GstCaps * caps)
 static GSList* has_intersection(CvRect *obj, GSList *objects);
 static void associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSList *trackers, GSList **unassociated_objects);
 static Tracker* closer_tracker_with_a_detected_obj_to(Tracker* tracker, GSList* trackers);
-void print_tracker(Tracker *tracker, IplImage *image, gint id_tracker);
+void print_tracker(Tracker *tracker, IplImage *image, gint id_tracker, gboolean show_particles);
 
 
 typedef struct {
@@ -587,7 +549,10 @@ associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSL
                         // Cone decay (moving)
                         gfloat angle, dist_tr_vet_to_d;
                         angle = (180 - get_inner_angle_b(rect_centroid_tr, tracker->previous_centroid, rect_centroid_d)) / 180;
-                        dist_tr_vet_to_d = 1 - (dist_point_segment(rect_centroid_d.x, rect_centroid_d.y, tracker->previous_centroid.x, tracker->previous_centroid.y, rect_centroid_tr.x, rect_centroid_tr.y) / dist_max);
+                        dist_tr_vet_to_d = 1 - (dist_point_segment(rect_centroid_d.x, 
+                                                rect_centroid_d.y, tracker->previous_centroid.x, 
+                                                tracker->previous_centroid.y, rect_centroid_tr.x, 
+                                                rect_centroid_tr.y) / dist_max);
                         part_a = area_proportion * ((angle + dist_tr_end_to_d + dist_tr_vet_to_d) / 3);
                     }
                 }
@@ -782,26 +747,33 @@ distribution_test(CvRect rect, IplImage *image)
     cvReleaseMat(&locations);
 }
 
-void print_tracker(Tracker *tracker, IplImage *image, gint id_tracker)
+void print_tracker(Tracker *tracker, IplImage *image, gint id_tracker, gboolean show_particles)
 {
     int i;
     gfloat intensity;
+    CvScalar color[]= {{255, 0, 0  }, {0  , 0  , 255}, {0  , 255, 0  }, {0, 255, 255},
+                       {255, 0, 255}, {255, 255, 0  }, {255, 255, 255}, {0, 0  , 0}};
 
-    for (i = 0; i < tracker->filter->SamplesNum; i++) {
-            intensity =  tracker->filter->flConfidence[i]/tracker->max_confidence;
+    if (show_particles) {
+        for (i = 0; i < tracker->filter->SamplesNum; i++) {
+                intensity =  tracker->filter->flConfidence[i]/tracker->max_confidence;
 
 
-            cvCircle(image, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]),
-                            3, CV_RGB(0, (1-intensity)*255, intensity * 255), -1, 8, 0);
+                cvCircle(image, cvPoint(tracker->filter->flSamples[i][0], tracker->filter->flSamples[i][1]),
+                                3, CV_RGB(0, (1-intensity)*255, intensity * 255), -1, 8, 0);
+        }
+        // center of the tracker (state vector)
+        cvCircle(image, cvPoint(tracker->filter->State[0], tracker->filter->State[1]),
+                            7, color[id_tracker], 2, 8, 0);
+
     }
 
+    // region of the tracker
     cvRectangle(image,  cvPoint(tracker->tracker_area.x, tracker->tracker_area.y),
                         cvPoint(tracker->tracker_area.x + tracker->tracker_area.width,
                                 tracker->tracker_area.y + tracker->tracker_area.height),
-                        CV_RGB(0, (1-1.0/id_tracker)*255, (1.0/id_tracker)*255), 2, 8, 0);
+                        color[id_tracker], 2, 8, 0);
 
-    cvCircle(image, cvPoint(tracker->filter->State[0], tracker->filter->State[1]),
-                        10, CV_RGB((1-1.0/id_tracker)*255, 0, (1.0/id_tracker)*255), 2, 8, 0);
 }
 
 /* chain function
@@ -813,7 +785,6 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     GstTracker *filter;
     IplImage *swap_temp;
     CvPoint2D32f *swap_points;
-    gint id_tracker;
     float avg_x = 0.0;
     IplImage *image;
 
@@ -831,12 +802,6 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     Tracker *new_tracker = NULL;
     Tracker *tracker = NULL;
     Tracker *closer_tracker = NULL;
-
-    // choose better values
-    gfloat beta = 0.7;
-    gfloat gamma = 0.5;
-    gfloat mi   = 0.2;
-
 
     guint  num_particles = 100;
 
@@ -872,7 +837,9 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
                     new_tracker = tracker_new( &unassociated_obj->region, 4, 4,
                                                 num_particles,
                                                 image,
-                                                beta, gamma, mi );
+                                                filter->beta, filter->gamma, filter->eta, 
+                                                g_slist_length(filter->trackers)+1 );
+
                     filter->trackers = g_slist_prepend(filter->trackers, new_tracker);
 
                     filter->unassociated_objects_last_frame = g_slist_remove(filter->unassociated_objects_last_frame, intersection_last_frame);
@@ -898,23 +865,21 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
 
     // tracking
     GST_INFO("trackers: %d\n", g_slist_length(filter->trackers));
-    id_tracker = 1;
     for (it_tracker = filter->trackers; it_tracker; it_tracker = it_tracker->next) {
         tracker = (Tracker*)it_tracker->data;
 
-        print_tracker(tracker, filter->image, it_tracker);
+        GST_INFO("running tracker: %d", tracker->id);
+
+        print_tracker(tracker, filter->image, tracker->id, filter->show_particles);
 
         closer_tracker = closer_tracker_with_a_detected_obj_to( tracker, filter->trackers );
         tracker_run(tracker, closer_tracker, &filter->confidence_density, image );
-        id_tracker++;
     }
-
 
 
     filter->prev_avg_x = avg_x;
     CV_SWAP(filter->prev_grey, filter->grey, swap_temp);
     CV_SWAP(filter->prev_pyramid, filter->pyramid, swap_temp);
-    CV_SWAP(filter->points[0], filter->points[1], swap_points);
     gst_buffer_set_data(buf, (guint8*) filter->image->imageData, (guint) filter->image->imageSize);
     return gst_pad_push(filter->srcpad, buf);
 }

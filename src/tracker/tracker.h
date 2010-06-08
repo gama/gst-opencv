@@ -57,12 +57,12 @@ typedef struct _Tracker Tracker;
 
 struct _Tracker
 {
-    guint          *id;
+    guint           id;
     CvConDensation *filter;
     guint           num_particles;
-    gfloat          mi;
-    gfloat          gamma;
     gfloat          beta;
+    gfloat          gamma;
+    gfloat          eta;
     CvRect          *detected_object;
     CvRect          tracker_area;
     CvSize          image_size;
@@ -78,7 +78,8 @@ Tracker*        tracker_new         (const CvRect *region,
                                      IplImage     *image,
                                      gfloat        beta,
                                      gfloat        gama,
-                                     gfloat        mi);
+                                     gfloat        mi,
+                                     gint          id);
 
 void            tracker_free        (Tracker      *tracker);
 

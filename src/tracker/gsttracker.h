@@ -78,7 +78,6 @@ struct _GstTracker
 
     IplImage *image, *grey, *prev_grey, *pyramid, *prev_pyramid;
     CvPoint2D32f *points[2];
-    char *status;
     guint flags;
     guint count;
     float prev_avg_x;
@@ -86,15 +85,14 @@ struct _GstTracker
 
     // filter parameter
     gboolean verbose;
-    gboolean tracker_by_motion;
     gboolean show_particles;
-    gboolean show_features;
     gboolean show_features_box;
     gboolean show_borders;
-    guint max_points;
-    guint min_points;
     guint win_size;
-    float movement_threshold;
+
+    gfloat beta;
+    gfloat gamma;
+    gfloat eta;
 
 
     CvConDensation* ConDens;

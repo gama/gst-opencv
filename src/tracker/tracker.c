@@ -60,7 +60,7 @@ static void     tracker_resample   (Tracker *tracker, CvMat *confidence_density,
 Tracker*
 tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
             gint num_particles, IplImage *image,
-            gfloat beta, gfloat gamma, gfloat mi)
+            gfloat beta, gfloat gamma, gfloat eta, gint id)
 {
     Tracker        *tracker;
     CvRNG           rng_state;
@@ -77,7 +77,9 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
     tracker->filter = cvCreateConDensation(state_vec_dim, measurement_vec_dim, num_particles);
     tracker->beta = beta;
     tracker->gamma = gamma;
-    tracker->mi = mi;
+    tracker->eta = eta;
+
+    tracker->id = id;
 
     tracker->image_size = cvSize(image->width, image->height);
 
@@ -290,7 +292,7 @@ tracker_resample(Tracker *tracker, CvMat *confidence_density, IplImage *image, g
 
             tracker->filter->flConfidence[i] = tracker->beta * likelihood +
                                                tracker->gamma * po * confidence_density_term +
-                                               tracker->mi   * ctr;
+                                               tracker->eta  * ctr;
             if (min_confidence > tracker->filter->flConfidence[i])
                min_confidence = tracker->filter->flConfidence[i];
             if (tracker->max_confidence < tracker->filter->flConfidence[i])
