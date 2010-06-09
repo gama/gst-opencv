@@ -64,6 +64,8 @@ struct _Tracker
     gfloat          gamma;
     gfloat          eta;
     CvRect          *detected_object;
+    guint           frames_to_last_detecting;
+    guint           frames_of_wrong_classifier_to_del;
     CvRect          tracker_area;
     CvSize          image_size;
     CClassifier    *classifier;

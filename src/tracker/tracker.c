@@ -85,6 +85,8 @@ tracker_new(const CvRect *region, gint state_vec_dim, gint measurement_vec_dim,
 
     tracker->detected_object = g_new(CvRect,1);
     *tracker->detected_object = *region;
+    tracker->frames_to_last_detecting = 0;
+    tracker->frames_of_wrong_classifier_to_del = 0;
 
     tracker->tracker_area = *tracker->detected_object;
 

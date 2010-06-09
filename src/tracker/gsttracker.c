@@ -85,6 +85,8 @@ static const float F[] = { 1, 1, 0, 1 };
 #define DEFAULT_DET_CONFIDENCE_PARAMETER    0.50
 #define DEFAULT_CLASSIFIER_PARAMETER        0.25
 
+#define FRAMES_TO_LAST_DETECTING_REM        6
+#define FRAMES_OF_WRONG_CLASSIFIER_REM      6
 
 #define DEFAULT_STATE_DIM           4
 #define DEFAULT_MEASUREMENT_DIM     4
@@ -411,6 +413,7 @@ static GSList* has_intersection(CvRect *obj, GSList *objects);
 static void associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSList *trackers, GSList **unassociated_objects);
 static Tracker* closer_tracker_with_a_detected_obj_to(Tracker* tracker, GSList* trackers);
 void print_tracker(Tracker *tracker, IplImage *image, gint id_tracker, gboolean show_particles);
+static void remove_old_trackers(IplImage *image, GSList **trackers);
 
 
 typedef struct {
@@ -600,6 +603,7 @@ associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSL
             detected_obj = (CvRect*) g_slist_nth_data(detected_objects, it_d_max);
             tracker = (Tracker*) g_slist_nth_data(trackers, it_tr_max);
             *tracker->detected_object = *detected_obj;
+            tracker->frames_to_last_detecting = 0;
             remain_d[it_d_max] = 0;
 
             // Clean the row and column
@@ -622,6 +626,23 @@ associate_detected_obj_to_tracker(IplImage *image, GSList *detected_objects, GSL
                     detected_obj->x, detected_obj->y, detected_obj->width,
                     detected_obj->height);
         }
+    }
+}
+
+static void
+remove_old_trackers(IplImage *image, GSList **trackers) {
+
+    GSList *it_tracker;
+    for (it_tracker = *trackers; it_tracker; it_tracker = it_tracker->next) {
+        Tracker *tracker = (Tracker*) it_tracker->data;
+
+        if (classifier_intermediate_classify(tracker->classifier, image, tracker->tracker_area) >= 0)
+            tracker->frames_of_wrong_classifier_to_del = 0;
+        else
+            tracker->frames_of_wrong_classifier_to_del++;
+
+        if (tracker->frames_to_last_detecting > FRAMES_TO_LAST_DETECTING_REM && tracker->frames_of_wrong_classifier_to_del > FRAMES_OF_WRONG_CLASSIFIER_REM)
+            *trackers = g_slist_remove(*trackers, tracker);
     }
 }
 
@@ -811,6 +832,8 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     cvCvtColor(filter->image, filter->grey, CV_BGR2GRAY);
     image = cvCloneImage(filter->image);
 
+    // Remove old trackers
+    remove_old_trackers(image, &filter->trackers);
 
     if (filter->detect_timestamp == GST_BUFFER_TIMESTAMP(buf) && filter->confidence_density_timestamp == GST_BUFFER_TIMESTAMP(buf))
     {
@@ -867,6 +890,7 @@ gst_tracker_chain(GstPad *pad, GstBuffer *buf)
     GST_INFO("trackers: %d\n", g_slist_length(filter->trackers));
     for (it_tracker = filter->trackers; it_tracker; it_tracker = it_tracker->next) {
         tracker = (Tracker*)it_tracker->data;
+        tracker->frames_to_last_detecting++;
 
         GST_INFO("running tracker: %d", tracker->id);
 
