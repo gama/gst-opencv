@@ -47,14 +47,12 @@
 #ifndef __GST_TRACKER_H__
 #define __GST_TRACKER_H__
 
-#include <gst/gst.h>
 #include <cv.h>
 #include <highgui.h>
 #include <cvaux.h>
 
 #include "tracker.h"
-
-#define MIN_AREA_MOTION_CONSIDERED (40*40)
+#include "../common/draw.h"
 
 G_BEGIN_DECLS
 /* #defines don't like whitespacey bits */
@@ -73,55 +71,30 @@ typedef struct _GstTrackerClass GstTrackerClass;
 
 struct _GstTracker
 {
-    GstElement element;
-    GstPad *sinkpad, *srcpad;
+    GstElement       element;
+    GstPad          *sinkpad;
+    GstPad          *srcpad;
 
-    IplImage *image, *grey, *prev_grey, *pyramid, *prev_pyramid;
-    CvPoint2D32f *points[2];
-    guint flags;
-    guint count;
-    float prev_avg_x;
-    gboolean initialized;
+    gboolean         verbose;
+    gboolean         show_particles;
+    gboolean         show_features_box;
 
-    // filter parameter
-    gboolean verbose;
-    gboolean show_particles;
-    gboolean show_features_box;
-    gboolean show_borders;
-    guint win_size;
+    IplImage        *image;
 
-    gfloat beta;
-    gfloat gamma;
-    gfloat eta;
-
-
-    CvConDensation* ConDens;
-    int state_dim, measurement_dim;
-    int sample_size;
-
-    int width_image, height_image;
-
-    int nframesToLearnBG;
-    int framesProcessed;
-    CvBGCodeBookModel* backgroundModel;
-    IplImage* background;
-
-    IplImage* cvMotion;
-
-    // breitenstein tracking algorithm
+    gfloat           beta;
+    gfloat           gamma;
+    gfloat           eta;
     GSList          *trackers;
     GSList          *unassociated_objects_last_frame;
     GSList          *detected_objects;
-
-    CvMat           confidence_density;
-
-    GstClockTime    detect_timestamp;
-    GstClockTime    confidence_density_timestamp;
+    CvMat            confidence_density;
+    GstClockTime     detect_timestamp;
+    GstClockTime     confidence_density_timestamp;
 };
 
 struct _GstTrackerClass
 {
-    GstElementClass parent_class;
+    GstElementClass  parent_class;
 };
 
 GType gst_tracker_get_type (void);
